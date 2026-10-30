@@ -206,6 +206,68 @@ You lose the nightly write-back (JARVIS can't read iCloud Drive), so learning st
 
 ---
 
+## Mode D — zero infrastructure, zero accounts (recommended if you want it working today)
+
+Mode A needs a Cloudflare account. Mode D needs nothing at all: the plan travels inside a URL, and the results come back by paste.
+
+### Send the plan
+
+No settings, no mailbox. JARVIS's **Send to Shortcuts** button posts the plan to the mailbox *if configured*, and **always** hands it to Shortcuts via the URL scheme:
+
+```
+shortcuts://run-shortcut?name=JARVIS%20Run&input=text&text=<url-encoded plan JSON>
+```
+
+The Shortcut receives the plan as **Shortcut Input**, not from the network.
+
+### Build the one Shortcut (8 actions)
+
+1. **Get Dictionary from** → *Shortcut Input*
+2. **If** `id` is empty → **Stop**
+3. **Get Dictionary Value** for key `actions` → **Repeat with Each**
+4. Inside: **Get Dictionary Value** `name` → **If** branches (same table as Mode A)
+5. Guarded actions (`sendMessage`, `addCalendarEvent`, `runShortcut`) → **Show Alert → Choose from Menu → Cancel / Send**
+6. **End Repeat**
+7. **Ask for Input** (default: *nothing failed*) → optional result note for the log
+8. **Add to Text File** → iCloud Drive/JARVIS/log.txt, **Append**, with a line per action: `setFocus ok 2026-10-30 08:00`
+
+### Close the learning loop by paste
+
+When you want JARVIS to absorb what happened, open `iCloud Drive/JARVIS/log.txt`, copy the lines, and in JARVIS type:
+
+```
+import: setFocus ok 2026-10-30 08:00
+sendMessage failed user refused
+logExpense ok 2026-10-30 08:05
+```
+
+Or paste a whole JSON batch:
+
+```
+import: {"v":1,"results":[{"action":"setFocus","ok":true,"at":"2026-10-30T08:00:00Z"}]}
+```
+
+JARVIS merges each line into its learning store as `Automation log: setFocus succeeded at 2026-10-30 08:00.`, and **dedupes** — importing the same log twice adds nothing the second time.
+
+| | Mode A (Worker) | Mode C (scheme only) | Mode D (paste) |
+|---|---|---|---|
+| Account required | Cloudflare | none | **none** |
+| Plan leaves device | yes | **no** | **no** |
+| Automatic nightly write-back | yes | no | manual paste |
+| Setup time | ~10 min | ~3 min | **~3 min** |
+
+### One-link configuration
+
+If you do deploy a mailbox, you can skip Settings entirely — open the app with the endpoint in the query string:
+
+```
+https://masteryoda224.github.io/Jarvis/?sync=https://your-worker.workers.dev/SECRET
+```
+
+JARVIS reads `?sync=`, saves it permanently to the device, and syncs results on every launch from then on.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
