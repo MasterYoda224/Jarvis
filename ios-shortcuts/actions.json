@@ -1,0 +1,124 @@
+{
+  "protocol": 1,
+  "notes": "Jarvis plan protocol. The Shortcut validates every action against this registry before executing; unknown names are skipped, never guessed.",
+  "limits": {
+    "max_actions": 10,
+    "max_payload_bytes": 20000,
+    "default_ttl_minutes": 60
+  },
+  "plan_schema": {
+    "v": 1,
+    "id": "pln_YYYYMMDD_hhmm_xxxx",
+    "created": "ISO-8601",
+    "expires": "ISO-8601",
+    "intent": "one-line human summary",
+    "actions": [
+      {
+        "id": "a1",
+        "name": "<one of the registry keys>",
+        "args": {},
+        "confirm": false
+      }
+    ]
+  },
+  "results_schema": {
+    "v": 1,
+    "device": "iphone",
+    "planId": "pln_...",
+    "results": [
+      {
+        "action": "<name>",
+        "actionId": "a1",
+        "ok": true,
+        "detail": "optional short string",
+        "at": "ISO-8601"
+      }
+    ]
+  },
+  "actions": {
+    "setFocus": {
+      "args": { "mode": "string: Work | Personal | Sleep | Do Not Disturb" },
+      "confirm": false,
+      "shortcut_action": "Set Focus",
+      "effect": "reversible"
+    },
+    "openApp": {
+      "args": { "name": "string: exact app name as shown on the home screen" },
+      "confirm": false,
+      "shortcut_action": "Open App",
+      "effect": "reversible"
+    },
+    "openURL": {
+      "args": { "url": "string: https URL" },
+      "confirm": false,
+      "shortcut_action": "Open URLs",
+      "effect": "reversible"
+    },
+    "createReminder": {
+      "args": { "title": "string", "due": "optional ISO-8601 date" },
+      "confirm": false,
+      "shortcut_action": "Add New Reminder",
+      "effect": "reversible"
+    },
+    "createNote": {
+      "args": { "title": "string", "body": "string" },
+      "confirm": false,
+      "shortcut_action": "Create Note",
+      "effect": "reversible"
+    },
+    "logExpense": {
+      "args": {
+        "amount": "number, positive",
+        "category": "string",
+        "note": "optional string"
+      },
+      "confirm": false,
+      "shortcut_action": "Append to Text File / Numbers row",
+      "effect": "append-only, low risk"
+    },
+    "speak": {
+      "args": { "text": "string, under 400 chars" },
+      "confirm": false,
+      "shortcut_action": "Speak Text",
+      "effect": "no side effect"
+    },
+    "showAlert": {
+      "args": { "title": "string", "message": "string" },
+      "confirm": false,
+      "shortcut_action": "Show Alert",
+      "effect": "no side effect"
+    },
+    "wait": {
+      "args": { "seconds": "number, max 120" },
+      "confirm": false,
+      "shortcut_action": "Wait",
+      "effect": "no side effect"
+    },
+    "sendMessage": {
+      "args": { "to": "string: phone number or contact name", "body": "string" },
+      "confirm": true,
+      "shortcut_action": "Send Message",
+      "effect": "IRREVERSIBLE"
+    },
+    "addCalendarEvent": {
+      "args": { "title": "string", "start": "ISO-8601", "end": "ISO-8601" },
+      "confirm": true,
+      "shortcut_action": "Add New Event",
+      "effect": "visible to others, confirm"
+    },
+    "runShortcut": {
+      "args": { "name": "string: name of another shortcut" },
+      "confirm": true,
+      "shortcut_action": "Run Shortcut",
+      "effect": "unbounded — confirm"
+    }
+  },
+  "hard_rules": [
+    "Never execute an action not present in this registry.",
+    "An action with confirm:true must pass an explicit user tap before running, every time.",
+    "Stop the whole plan on the first failure unless the action is marked non-blocking.",
+    "Refuse a plan whose expires timestamp is in the past.",
+    "Refuse a plan with more than max_actions entries.",
+    "Record a result for every attempted action, including skipped and refused ones."
+  ]
+}
