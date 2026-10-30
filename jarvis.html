@@ -1,0 +1,1614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05070d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="JARVIS">
+<meta name="description" content="JARVIS — a free assistant that runs on your device and learns from you.">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Crect width='120' height='120' rx='26' fill='%2305070d'/%3E%3Ccircle cx='60' cy='60' r='31' fill='none' stroke='%2335e0ff' stroke-width='3'/%3E%3Ccircle cx='60' cy='60' r='11' fill='%2335e0ff'/%3E%3C/svg%3E">
+<link rel="manifest" href="manifest.webmanifest">
+<title>JARVIS — local AI</title>
+<style>
+  :root{
+    --bg:#05070d; --panel:#0b1220; --panel2:#0e1728;
+    --line:rgba(53,224,255,.16); --line2:rgba(53,224,255,.35);
+    --cyan:#35e0ff; --amber:#ffbf47; --red:#ff5a6e; --green:#4ade80;
+    --text:#dbe9f4; --muted:#7b93a8;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    margin:0;background:
+      radial-gradient(900px 500px at 50% -10%, rgba(53,224,255,.10), transparent 60%),
+      radial-gradient(600px 400px at 90% 110%, rgba(53,224,255,.06), transparent 60%),
+      var(--bg);
+    color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;overscroll-behavior:none;
+  }
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:52px 52px;opacity:.22;
+    mask-image:radial-gradient(circle at 50% 40%,#000 0%,transparent 78%);
+    -webkit-mask-image:radial-gradient(circle at 50% 40%,#000 0%,transparent 78%);
+  }
+  .wrap{position:relative;z-index:1;display:flex;flex-direction:column;height:100vh;height:100dvh;max-width:900px;margin:0 auto;width:100%}
+
+  header{display:flex;align-items:center;gap:9px;padding:12px 14px;padding-top:calc(12px + env(safe-area-inset-top));border-bottom:1px solid var(--line);backdrop-filter:blur(8px)}
+  .brand{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:.2em;font-size:12px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--cyan);box-shadow:0 0 12px var(--cyan)}
+  .spacer{flex:1}
+  .pill{font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;padding:5px 8px;border-radius:999px;border:1px solid var(--line2);color:var(--cyan);white-space:nowrap}
+  .pill.busy{border-color:var(--amber);color:var(--amber)}
+  .pill.err{border-color:var(--red);color:var(--red)}
+  .pill.ok{border-color:rgba(74,222,128,.5);color:var(--green)}
+  .iconbtn{background:transparent;border:1px solid var(--line);color:var(--muted);width:36px;height:36px;border-radius:10px;cursor:pointer;font-size:14px;display:grid;place-items:center;transition:.15s;padding:0}
+  .iconbtn:hover{color:var(--cyan);border-color:var(--line2)}
+  .iconbtn.on{color:var(--cyan);border-color:var(--line2);background:rgba(53,224,255,.08)}
+
+  #installBar{display:none;align-items:center;gap:10px;padding:9px 14px;background:rgba(53,224,255,.07);border-bottom:1px solid var(--line);font-size:11.5px;color:#bfe9f6;line-height:1.45}
+  #installBar.show{display:flex}
+  #installBar b{color:var(--cyan)}
+  #installBar button{background:transparent;border:1px solid var(--line2);color:var(--cyan);border-radius:8px;padding:5px 9px;font-size:11px;cursor:pointer;white-space:nowrap}
+
+  .reactor{display:grid;place-items:center;padding:10px 0 2px}
+  .core{position:relative;width:104px;height:104px;border-radius:50%;display:grid;place-items:center;cursor:pointer;background:radial-gradient(circle,rgba(53,224,255,.16),transparent 62%);transition:box-shadow .2s}
+  .ring{position:absolute;inset:0;border-radius:50%;border:1px solid var(--line2);animation:spin 14s linear infinite}
+  .ring:nth-child(2){inset:10px;border-style:dashed;animation-duration:22s;animation-direction:reverse}
+  .ring:nth-child(3){inset:21px;border-color:rgba(53,224,255,.12);animation-duration:9s}
+  .ring::after{content:"";position:absolute;top:-3px;left:50%;width:5px;height:5px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .core.idle .ring{animation-play-state:paused;opacity:.4}
+  .core.listening{box-shadow:0 0 0 1px var(--cyan),0 0 40px rgba(53,224,255,.35)}
+  .core.thinking .ring{animation-duration:2.4s;border-color:var(--amber)}
+  .core.speaking{box-shadow:0 0 0 1px var(--cyan),0 0 60px rgba(53,224,255,.5)}
+  .mic-glyph{font-size:24px;filter:drop-shadow(0 0 8px rgba(53,224,255,.6))}
+  .hint{font-family:var(--mono);font-size:9.5px;color:var(--muted);letter-spacing:.11em;text-transform:uppercase;margin-top:5px;height:13px}
+
+  #log{flex:1;overflow-y:auto;padding:8px 14px 16px;display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch}
+  #log::-webkit-scrollbar{width:5px}
+  #log::-webkit-scrollbar-thumb{background:rgba(53,224,255,.2);border-radius:8px}
+  .msg{max-width:90%;padding:10px 13px;border-radius:13px;font-size:14.5px;line-height:1.55;white-space:pre-wrap;word-break:break-word;animation:fade .2s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .msg.user{align-self:flex-end;background:rgba(53,224,255,.1);border:1px solid var(--line2)}
+  .msg.bot{align-self:flex-start;background:var(--panel);border:1px solid var(--line)}
+  .msg.sys{align-self:center;max-width:95%;font-family:var(--mono);font-size:11px;color:var(--muted);border:1px dashed var(--line);background:transparent;text-align:center;padding:7px 11px;white-space:pre-wrap}
+  .msg.tool{align-self:flex-start;max-width:93%;font-family:var(--mono);font-size:11px;color:var(--cyan);background:rgba(53,224,255,.05);border:1px solid var(--line);padding:8px 11px;border-radius:10px;white-space:pre-wrap}
+  .meta{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.09em;text-transform:uppercase;margin-top:6px;opacity:.75;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .fb{background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:6px;font-size:10px;padding:2px 6px;cursor:pointer;line-height:1.3}
+  .fb:hover{color:var(--cyan);border-color:var(--line2)}
+  .fb.on{border-color:var(--green);color:var(--green)}
+  .cursor::after{content:"▍";color:var(--cyan);animation:blink 1s steps(2) infinite}
+  @keyframes blink{50%{opacity:0}}
+
+  .composer{padding:9px 11px calc(11px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:linear-gradient(180deg,transparent,rgba(5,7,13,.9))}
+  .row{display:flex;gap:7px;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:5px 6px 5px 12px}
+  .row:focus-within{border-color:var(--line2);box-shadow:0 0 0 3px rgba(53,224,255,.07)}
+  #inp{flex:1;background:transparent;border:0;outline:0;color:var(--text);font-size:16px;font-family:inherit;padding:8px 0;min-width:0}
+  #inp::placeholder{color:#566b7e}
+  .send{background:linear-gradient(180deg,#2fd0ee,#1a9fbd);border:0;color:#04121a;font-weight:700;border-radius:10px;padding:10px 13px;cursor:pointer;font-size:12.5px;letter-spacing:.04em}
+  .send:disabled{opacity:.4;cursor:not-allowed}
+  .mic{background:transparent;border:1px solid var(--line2);color:var(--cyan);width:38px;height:38px;border-radius:10px;cursor:pointer;font-size:15px;display:grid;place-items:center;padding:0}
+  .mic.live{background:rgba(255,90,110,.16);border-color:var(--red);color:var(--red)}
+  .chips{display:flex;gap:6px;overflow-x:auto;padding:7px 2px 0;scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex:0 0 auto;font-family:var(--mono);font-size:10.5px;color:var(--muted);background:transparent;border:1px solid var(--line);border-radius:999px;padding:6px 10px;cursor:pointer;white-space:nowrap}
+  .chip:hover{color:var(--cyan);border-color:var(--line2)}
+
+  .sheet{position:fixed;inset:0;z-index:50;background:rgba(3,5,10,.86);backdrop-filter:blur(10px);display:none;align-items:flex-end;justify-content:center}
+  .sheet.open{display:flex}
+  .card{background:var(--panel);border:1px solid var(--line2);border-radius:18px 18px 0 0;width:100%;max-width:900px;max-height:88vh;overflow-y:auto;padding:18px 18px calc(22px + env(safe-area-inset-bottom))}
+  @media(min-width:700px){.sheet{align-items:center}.card{border-radius:18px}}
+  .card h3{margin:0 0 4px;font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--cyan);font-family:var(--mono)}
+  .card p.sub{margin:0 0 13px;color:var(--muted);font-size:11.5px;line-height:1.55}
+  .card h4{margin:16px 0 5px;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-family:var(--mono)}
+  .field{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(53,224,255,.08)}
+  .field:last-of-type{border-bottom:0}
+  .field label{font-size:13px}
+  .field small{display:block;color:var(--muted);font-size:10.5px;margin-top:2px;line-height:1.4}
+  select{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:7px 8px;font-size:12px;font-family:var(--mono);max-width:190px}
+  input[type=range]{width:104px;accent-color:var(--cyan)}
+  input[type=checkbox]{width:18px;height:18px;accent-color:#35e0ff}
+  .ghost{background:transparent;border:1px solid var(--line2);color:var(--cyan);border-radius:9px;padding:9px 13px;font-size:12px;cursor:pointer;margin-top:8px}
+  .ghost.warn{border-color:rgba(255,90,110,.5);color:var(--red)}
+  .btnrow{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px}
+  .limits{margin-top:13px;padding:11px 12px;border-radius:11px;background:rgba(255,191,71,.06);border:1px solid rgba(255,191,71,.22);font-size:11px;line-height:1.6;color:#e8d5a8}
+  .limits b{color:var(--amber)}
+  .diag{font-family:var(--mono);font-size:10px;line-height:1.7;color:var(--muted);white-space:pre-wrap;margin-top:11px;padding:9px;border:1px solid var(--line);border-radius:9px;background:rgba(0,0,0,.25)}
+  .cmds{font-family:var(--mono);font-size:11px;line-height:1.95;color:var(--muted)}
+  .cmds b{color:var(--text);font-weight:600}
+  kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line2);border-radius:5px;padding:1px 5px;color:var(--cyan)}
+  #toast{position:fixed;left:50%;bottom:92px;transform:translateX(-50%);z-index:80;background:rgba(255,90,110,.14);border:1px solid rgba(255,90,110,.55);color:#ffd9de;padding:10px 14px;border-radius:11px;font-size:12px;max-width:88%;display:none;line-height:1.45}
+  #toast.show{display:block}
+  /* ============ PHONE-FIRST MODE ============ */
+  @media (max-width: 640px), (pointer: coarse) {
+    .msg{max-width:95%;font-size:15.5px;line-height:1.6;padding:12px 14px}
+    header{padding:10px 12px;padding-top:calc(10px + env(safe-area-inset-top));gap:7px}
+    .brand{letter-spacing:.1em;font-size:11.5px}
+    .pill{font-size:9px;padding:5px 7px}
+    /* every control clears the 44px touch minimum */
+    .iconbtn{width:44px;height:44px;border-radius:12px;font-size:17px}
+    .mic{width:48px;height:48px;border-radius:12px;font-size:18px}
+    .send{padding:14px 16px;font-size:13px;min-height:48px;border-radius:12px}
+    .row{border-radius:16px;padding:4px 5px 4px 12px}
+    #inp{font-size:17px;padding:11px 0}
+    .core{width:112px;height:112px}
+    .hint{font-size:9px;letter-spacing:.08em}
+    .chips{padding:9px 2px 0;gap:8px}
+    .chip{font-size:12px;padding:10px 14px;border-radius:14px}
+    .composer{padding:8px 10px calc(10px + env(safe-area-inset-bottom))}
+    #log{padding:8px 12px 14px;gap:11px}
+    /* bottom sheets become near-full-screen and thumb-reachable */
+    .sheet{align-items:flex-end}
+    .card{max-height:92vh;border-radius:22px 22px 0 0;padding:18px 16px calc(26px + env(safe-area-inset-bottom))}
+    .field{padding:15px 0;min-height:52px;flex-wrap:wrap;gap:8px}
+    .field label{font-size:14.5px}
+    .field small{font-size:11.5px;line-height:1.45}
+    select{font-size:15px;padding:12px 10px;min-height:46px;max-width:100%;border-radius:10px}
+    input[type=checkbox]{width:26px;height:26px}
+    input[type=range]{width:150px;height:34px}
+    .ghost{min-height:46px;padding:13px 16px;font-size:13.5px;border-radius:11px}
+    .fb{min-height:32px;padding:6px 10px;font-size:13px;border-radius:8px}
+    .btnrow{gap:8px}
+    .card h3{font-size:13px}
+    .card h4{font-size:11px}
+    .cmds{font-size:12px;line-height:2.1}
+    .diag{font-size:10.5px;line-height:1.75}
+    #toast{bottom:110px;font-size:13px;padding:12px 15px}
+    #installBar{font-size:12.5px;padding:11px 12px;gap:8px;flex-wrap:wrap}
+    #installBar button{min-height:38px;padding:9px 12px;font-size:12px}
+  }
+  @media (max-width:400px){
+    .msg{max-width:97%}
+    .iconbtn{width:42px;height:42px}
+    .brand span.dot{box-shadow:0 0 8px var(--cyan)}
+  }
+  @media (hover: none){
+    .chip:hover,.iconbtn:hover{color:var(--muted);border-color:var(--line)}
+  }
+
+  /* ============ ACCESSIBILITY & FINAL POLISH ============ */
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+  }
+  :focus-visible{outline:2px solid var(--cyan);outline-offset:2px;border-radius:6px}
+  .stamp{opacity:.5;font-size:9px;letter-spacing:.06em}
+  .send.stop{background:linear-gradient(180deg,#ff8090,#d9455c);color:#1a0409}
+  .txt{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;font-family:var(--mono);max-width:210px;min-height:38px}
+  @media (max-width:640px),(pointer:coarse){ .txt{font-size:15px;max-width:100%;min-height:46px} }
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><span class="dot"></span>J.A.R.V.I.S</div>
+    <div class="spacer"></div>
+    <div class="pill" id="status" role="status" aria-live="polite">booting</div>
+    <button class="iconbtn" id="btnWake" title="Wake word" aria-label="Toggle wake word">👂</button>
+    <button class="iconbtn" id="btnHelp" title="Help" aria-label="Help and commands">?</button>
+    <button class="iconbtn" id="btnSet" title="Settings" aria-label="Settings">⚙</button>
+  </header>
+
+  <div id="installBar">
+    <span id="installText">Install me on your phone.</span>
+    <button id="btnInstall">How</button>
+    <button id="btnInstallClose">✕</button>
+  </div>
+
+  <div class="reactor">
+    <div class="core idle" id="core">
+      <div class="ring"></div><div class="ring"></div><div class="ring"></div>
+      <div class="mic-glyph" id="glyph">◉</div>
+    </div>
+    <div class="hint" id="hint">tap the core to speak</div>
+  </div>
+
+  <div id="log" role="log" aria-live="polite" aria-label="Conversation"></div>
+
+  <div class="composer">
+    <div class="row">
+      <input id="inp" autocomplete="off" autocapitalize="sentences" placeholder="Ask anything, or type a command…" aria-label="Message" />
+      <button class="mic" id="btnMic" title="Talk" aria-label="Talk">🎙</button>
+      <button class="send" id="btnSend" aria-label="Send message">SEND</button>
+    </div>
+    <div class="chips" id="chips"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- SETTINGS -->
+<div class="sheet" id="sheetSet">
+  <div class="card">
+    <h3>Settings</h3>
+    <p class="sub">Everything runs on this device. Nothing is sent to a server I control.</p>
+
+    <div class="field">
+      <label>Brain model<small id="modelNote">Larger = smarter, slower, more RAM</small></label>
+      <select id="selModel"></select>
+    </div>
+    <div class="field">
+      <label>Voice replies<small>Your device's speech engine</small></label>
+      <input type="checkbox" id="chkTTS" checked>
+    </div>
+    <div class="field">
+      <label>Voice</label>
+      <select id="selVoice"><option>loading…</option></select>
+    </div>
+    <div class="field">
+      <label>Speaking rate</label>
+      <input type="range" id="rngRate" min="0.7" max="1.4" step="0.05" value="1">
+    </div>
+    <div class="field">
+      <label>Live facts<small>DuckDuckGo instant answers</small></label>
+      <input type="checkbox" id="chkFacts" checked>
+    </div>
+    <div class="field">
+      <label>Learning<small id="learnCount">0 things learned</small></label>
+      <input type="checkbox" id="chkLearn" checked>
+    </div>
+    <div class="field">
+      <label>Text-only mode<small id="compatNote">Auto: on when this device has no WebGPU (iPhone)</small></label>
+      <input type="checkbox" id="chkCompat">
+    </div>
+    <div class="field">
+      <label>Answer style<small>Shapes every model reply</small></label>
+      <select id="selStyle">
+        <option value="brief">Brief — one or two sentences</option>
+        <option value="normal" selected>Normal — up to four</option>
+        <option value="detail">Detailed — explain properly</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Speech language<small>For voice input</small></label>
+      <select id="selLang">
+        <option value="en-US">English (US)</option>
+        <option value="en-GB">English (UK)</option>
+        <option value="es-ES">Español</option>
+        <option value="fr-FR">Français</option>
+        <option value="de-DE">Deutsch</option>
+        <option value="pt-BR">Português (BR)</option>
+        <option value="it-IT">Italiano</option>
+        <option value="hi-IN">हिन्दी</option>
+        <option value="ar-SA">العربية</option>
+        <option value="zh-CN">中文</option>
+        <option value="ja-JP">日本語</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Custom model id<small>Advanced — overrides the list above</small></label>
+      <input class="txt" id="inpModel" placeholder="e.g. Phi-3.5-mini-instruct-q4f32_1-MLC" aria-label="Custom model id">
+    </div>
+    <div class="field">
+      <label>Memory<small id="memCount">0 facts</small></label>
+      <button class="ghost warn" id="btnWipe" style="margin:0">Wipe all</button>
+    </div>
+
+    <div class="btnrow">
+      <button class="ghost" id="btnExport">Export chat</button>
+      <button class="ghost" id="btnDiag">Diagnostics</button>
+      <button class="ghost" id="btnUnload">Unload model</button>
+      <button class="ghost" id="btnPrune">Prune learning</button>
+    </div>
+    <div class="diag" id="diag">Press Diagnostics to check GPU, model and storage.</div>
+
+    <div class="limits">
+      <b>What this honestly can't do:</b> it can't control your phone, home devices, or other
+      apps; it can't browse the live web; and the on-device model is far weaker than a frontier
+      AI — it will be confidently wrong sometimes. Numbers it reports come from the built-in
+      calculator, not from guessing.
+    </div>
+  </div>
+</div>
+
+<!-- HELP -->
+<div class="sheet" id="sheetHelp">
+  <div class="card">
+    <h3>Commands &amp; install</h3>
+    <p class="sub">Commands run instantly — no model needed, even while the brain is loading.</p>
+
+    <h4>Install on your phone</h4>
+    <div class="cmds">
+      <b>Android:</b> open this file in Chrome → ⋮ menu → <b>Add to Home screen</b> / <b>Install app</b>.<br>
+      <b>iPhone:</b> open in Safari → Share → <b>Add to Home Screen</b>. Voice and commands work
+      fully; the AI model needs WebGPU, which iOS does not have yet, so chat is desktop/Android only.<br>
+      <b>Best experience:</b> served over HTTPS it installs as a real PWA and runs offline.
+    </div>
+
+    <h4>Commands</h4>
+    <div class="cmds">
+      <b>calc</b> 18*450/12 &nbsp;·&nbsp; or just <b>18*450/12</b><br>
+      <b>"what's 18 times 450"</b> &nbsp;→ calculator, not the model<br>
+      <b>fleet</b> 65 15 4200 22000 &nbsp;→ price/day, days/mo, ins/yr, car cost<br>
+      <b>convert</b> 40 mi to km &nbsp;·&nbsp; <b>100 f to c</b><br>
+      <b>timer</b> 10 min &nbsp;·&nbsp; <b>remind me in</b> 5 min to call Bob<br>
+      <b>note</b> call the insurer &nbsp;·&nbsp; <b>notes</b> &nbsp;·&nbsp; <b>clear notes</b><br>
+      <b>remember</b> I own a 2019 Corolla &nbsp;·&nbsp; <b>what do you remember</b><br>
+      <b>learn:</b> my target market is Phoenix &nbsp;→ permanent correction<br>
+      <b>what have you learned</b> &nbsp;·&nbsp; <b>forget learning</b><br>
+      <b>fact</b> einstein &nbsp;·&nbsp; <b>search</b> turo rules &nbsp;·&nbsp; <b>time</b> &nbsp;·&nbsp; <b>date</b><br>
+      <b>clear</b> &nbsp;·&nbsp; <b>export</b> &nbsp;·&nbsp; <b>stop</b> &nbsp;·&nbsp; <b>help</b>
+    </div>
+
+    <h4>How it gets smarter</h4>
+    <div class="cmds">
+      Every answer it gives is stored locally with a score. Before each new question it retrieves
+      the most relevant past answers and your corrections and puts them in the prompt — so it
+      stops repeating mistakes and starts matching how you work. 👎 on a reply teaches it the
+      right answer; 👍 promotes that answer in future retrieval.
+    </div>
+
+    <h4>Text mode (iPhone)</h4>
+    <div class="cmds">
+      iPhones have no WebGPU, so the language model cannot run there. Instead of failing, JARVIS
+      switches to <b>text mode</b>: it answers from corrections you taught it, built-in researched
+      notes, and live instant facts — and voice in/out keeps working. Toggle it yourself in
+      Settings → Text-only mode. Teach it with <b>learn: …</b> and text mode gets more useful.
+    </div>
+
+    <h4>Offline</h4>
+    <div class="cmds">
+      Served over HTTPS (or localhost), a service worker caches the app shell — it opens with no
+      network. Model weights are cached separately by the browser after the first download.
+      On <b>file://</b> the service worker is skipped; the page itself still works offline.
+    </div>
+
+    <h4>Model tools</h4>
+    <div class="cmds">
+      The model can call the calculator itself: it emits <b>[[tool: fleet 65 15]]</b>, the app runs
+      it, then it answers with the real result — so it can't invent your numbers.
+    </div>
+
+    <h4>Keys</h4>
+    <div class="cmds"><kbd>Ctrl</kbd>+<kbd>Space</kbd> talk &nbsp;·&nbsp; <kbd>Esc</kbd> stop speaking</div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   JARVIS — free, local-first, and it learns from you
+   layers: skill engine → live facts → memory → on-device LLM
+   ============================================================ */
+const $ = (id) => document.getElementById(id);
+const logEl = $('log'), inp = $('inp'), core = $('core'), glyph = $('glyph');
+const statusEl = $('status'), hintEl = $('hint'), toastEl = $('toast');
+
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem('jarvis.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) {
+    const write = () => localStorage.setItem('jarvis.' + k, JSON.stringify(v));
+    try { write(); return true; }
+    catch (e) {
+      // storage full: shed the least valuable data, then try once more
+      try {
+        try {
+          const learned = JSON.parse(localStorage.getItem('jarvis.learned') || '[]');
+          if (learned.length > 20) localStorage.setItem('jarvis.learned', JSON.stringify(learned.slice(-Math.floor(learned.length / 2))));
+        } catch (e1) {}
+        try {
+          const chat = JSON.parse(localStorage.getItem('jarvis.chat') || '[]');
+          if (chat.length > 4) localStorage.setItem('jarvis.chat', JSON.stringify(chat.slice(-4)));
+        } catch (e2) {}
+        try {
+          const fc = JSON.parse(localStorage.getItem('jarvis.factcache') || '{}');
+          localStorage.removeItem('jarvis.factcache');
+          void fc;
+        } catch (e3) {}
+        write();
+        if (typeof toast === 'function') toast('Storage was full — older notes were trimmed to make room.', 6000);
+        return true;
+      } catch (e4) {
+        // still too big: keep only the newest half of the incoming array
+        if (Array.isArray(v) && v.length > 8) {
+          try {
+            localStorage.setItem('jarvis.' + k, JSON.stringify(v.slice(-Math.floor(v.length / 2))));
+            if (typeof toast === 'function') toast('Storage is tight — kept only the newest entries.', 6000);
+            return true;
+          } catch (e5) { return false; }
+        }
+        return false;
+      }
+    }
+  },
+  del(k) { try { localStorage.removeItem('jarvis.' + k); } catch (e) {} }
+};
+
+const state = {
+  mode: 'idle', engine: null, engineId: null, loading: null,
+  history: [], recognise: null, listening: false, listenPtt: false, voice: null,
+  tts: LS.get('tts', true), facts: LS.get('facts', true), learn: LS.get('learn_on', true),
+  wake: false, speakQueue: 0, busy: false, ttsBuf: { buf: '' },
+  pendingFix: null,
+  compat: LS.get('compat', !(typeof navigator !== 'undefined' && 'gpu' in navigator)),
+  shell: false, lang: LS.get('lang', 'en-US'), stopRequested: false
+};
+
+/* ============================================================
+   BRAIN — local learning store
+   remembered answers + corrections, retrieved by keyword score
+   ============================================================ */
+const STOP = new Set(('a an the and or but if then than that this these those to of in on for with without from by at as is are was were be been being do does did i you he she it we they me my your our their what which who whom how why when where can could would should will shall may might must not no yes so very just about into over under again once here there all any both each few more most other some such only own same too s t don now').split(' '));
+
+const Brain = {
+  items() { return LS.get('learned', []); },
+  setItems(v) { LS.set('learned', v.slice(-400)); },
+
+  tokens(s) {
+    return String(s || '').toLowerCase()
+      .replace(/[^a-z0-9\s%$]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 2 && !STOP.has(w));
+  },
+
+  /* BM25-lite: idf-weighted overlap, with a bonus for exact phrase hits */
+  score(queryTokens, item) {
+    const docTokens = this.tokens(item.q + ' ' + item.a);
+    if (!docTokens.length || !queryTokens.length) return 0;
+    const bag = new Set(docTokens);
+    const N = Math.max(this.items().length, 1);
+    const df = (t) => this.items().filter(it => this.tokens(it.q + ' ' + it.a).includes(t)).length;
+    let s = 0;
+    queryTokens.forEach(t => {
+      if (!bag.has(t)) return;
+      const idf = Math.log(1 + N / (1 + df(t)));
+      s += idf;
+    });
+    // normalise by query length so long questions don't dominate
+    s = s / Math.sqrt(queryTokens.length);
+    if (item.corrected) s *= 1.8;
+    s *= (1 + 0.15 * ((item.up || 0) - (item.down || 0)));
+    const q = String(item.q || '').toLowerCase();
+    if (q.length > 8 && String(item._q || '').toLowerCase().includes(q.slice(0, 40))) s += 1.2;
+    return s;
+  },
+
+  add(question, answer) {
+    if (!state.learn) return;
+    if (!question || !answer) return;
+    if (answer.length < 40 || answer.length > 1400) return;
+    const items = this.items();
+    const key = String(question).toLowerCase().trim().slice(0, 90);
+    const existing = items.findIndex(it => it.q === key);
+    const rec = { q: key, a: String(answer).slice(0, 1200), at: Date.now(), up: 0, down: 0 };
+    if (existing >= 0) { rec.up = items[existing].up || 0; items[existing] = rec; }
+    else items.push(rec);
+    this.setItems(items);
+    updateLearn();
+  },
+
+  correct(question, text) {
+    const items = this.items();
+    items.push({
+      q: String(question || 'correction').toLowerCase().trim().slice(0, 90),
+      a: String(text).slice(0, 800), at: Date.now(), up: 2, down: 0, corrected: true
+    });
+    this.setItems(items);
+    updateLearn();
+  },
+
+  vote(question, dir) {
+    const items = this.items();
+    const key = String(question || '').toLowerCase().trim().slice(0, 90);
+    const hit = items.find(it => it.q === key);
+    if (!hit) return false;
+    hit[dir === 'up' ? 'up' : 'down'] = (hit[dir === 'up' ? 'up' : 'down'] || 0) + 1;
+    this.setItems(items);
+    return true;
+  },
+
+  top(question, k) {
+    const qt = this.tokens(question);
+    if (!qt.length) return [];
+    const qset = new Set(qt);
+    const scored = this.items().map(it => {
+      const doc = new Set(this.tokens(it.q + ' ' + it.a));
+      let overlap = 0;
+      qset.forEach(t => { if (doc.has(t)) overlap++; });
+      return { it: it, s: this.score(qt, Object.assign({ _q: question }, it)), overlap: overlap };
+    })
+      // a single shared word (e.g. "car") is not enough to hijack an answer
+      .filter(x => x.s > 0.35 && (x.overlap >= 2 || qset.size === 1))
+      .sort((a, b) => b.s - a.s);
+    return scored.slice(0, k || 3).map(x => x.it);
+  },
+
+  /* prompt context built from facts + best past answers */
+  context(question) {
+    const parts = [];
+    const mem = LS.get('memory', []);
+    if (mem.length) parts.push('FACTS THE USER TOLD YOU TO REMEMBER:\n' + mem.slice(-12).map(m => '- ' + m).join('\n'));
+    const top = this.top(question, 3);
+    if (top.length) {
+      parts.push('RELEVANT NOTES FROM EARLIER IN THIS ASSISTANT\'S LIFE (may be stale — prefer fresh reasoning, but do not contradict a CORRECTION):\n' +
+        top.map(t => (t.corrected ? '[CORRECTION — MUST FOLLOW] ' : '[past answer] ') + 'Q: ' + t.q + '\nA: ' + t.a.slice(0, 400)).join('\n\n'));
+    }
+    return parts.join('\n\n');
+  },
+
+  prune() {
+    const items = this.items().map(it => Object.assign({}, it, { net: (it.up || 0) - (it.down || 0) }));
+    const keep = items.filter(it => it.corrected || (it.net > -2)).slice(-250);
+    this.setItems(keep);
+    updateLearn();
+    return items.length - keep.length;
+  },
+
+  clear() { LS.del('learned'); updateLearn(); }
+};
+
+/* ---------------- UI ---------------- */
+function setMode(m) {
+  state.mode = m;
+  core.className = 'core ' + (m === 'idle' ? 'idle' : m);
+  hintEl.textContent = { idle: 'tap the core to speak', listening: 'listening — speak now',
+    thinking: 'thinking…', speaking: 'speaking — tap to interrupt' }[m];
+  glyph.textContent = m === 'thinking' ? '◌' : (m === 'speaking' ? '◈' : '◉');
+}
+function setStatus(t, kind) { statusEl.textContent = t; statusEl.className = 'pill' + (kind ? ' ' + kind : ''); }
+
+function addMsg(text, who, meta) {
+  const el = document.createElement('div');
+  el.className = 'msg ' + who;
+  const body = document.createElement('span');
+  body.textContent = text;
+  el.appendChild(body);
+  let metaEl = null;
+  const stamp = document.createElement('span');
+  stamp.className = 'stamp';
+  stamp.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const ensureMeta = () => {
+    if (!metaEl) { metaEl = document.createElement('div'); metaEl.className = 'meta'; el.appendChild(metaEl); }
+    return metaEl;
+  };
+  if (meta) { ensureMeta().textContent = meta; ensureMeta().appendChild(stamp); }
+  logEl.appendChild(el);
+  logEl.scrollTop = logEl.scrollHeight;
+  return {
+    el, body, metaEl,
+    append(t) { body.textContent += t; logEl.scrollTop = logEl.scrollHeight; },
+    set(t) { body.textContent = t; },
+    meta(m) { ensureMeta().textContent = m; ensureMeta().appendChild(stamp); },
+    addFeedback(question, answer) {
+      const bar = ensureMeta();
+      const up = document.createElement('button');
+      up.className = 'fb'; up.textContent = '👍'; up.setAttribute('aria-label', 'Good answer');
+      const down = document.createElement('button');
+      down.className = 'fb'; down.textContent = '👎'; down.setAttribute('aria-label', 'Wrong answer');
+      const copy = document.createElement('button');
+      copy.className = 'fb'; copy.textContent = '⧉'; copy.setAttribute('aria-label', 'Copy reply');
+      up.onclick = () => { Brain.vote(question, 'up'); up.classList.add('on'); down.classList.remove('on'); toast('Good — I will favour that answer.', 3000); };
+      down.onclick = () => {
+        down.classList.add('on'); up.classList.remove('on');
+        Brain.vote(question, 'down');
+        state.pendingFix = { question: question, at: Date.now() };
+        toast('Wrong — tell me the correct answer and I will never repeat it.', 9000);
+      };
+      copy.onclick = () => {
+        const txt = body.textContent;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(txt).then(() => toast('Copied.', 2000)).catch(() => toast('Copy blocked by the browser.', 3000));
+        } else { toast('Copy is not available here.', 3000); }
+      };
+      bar.appendChild(up); bar.appendChild(down); bar.appendChild(copy);
+      void answer;
+    }
+  };
+}
+const addSys = (t) => addMsg(t, 'sys');
+const addTool = (t) => addMsg(t, 'tool', 'tool result');
+
+let toastTimer = null;
+function toast(msg, ms) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms || 7000);
+}
+
+/* ---------------- Persistence ---------------- */
+function saveChat(who, text, meta) {
+  const h = LS.get('chat', []);
+  h.push({ who, text, meta: meta || '', at: Date.now() });
+  LS.set('chat', h.slice(-60));
+}
+function renderSavedChat() {
+  const h = LS.get('chat', []);
+  if (!h.length) return false;
+  const slice = h.slice(-14);
+  addSys('— restored ' + slice.length + ' earlier message' + (slice.length === 1 ? '' : 's') + ' —');
+  slice.forEach(m => addMsg(m.text, m.who, m.meta));
+  return true;
+}
+
+/* ---------------- Speech out ---------------- */
+let voices = [];
+function loadVoices() {
+  if (!('speechSynthesis' in window)) return;
+  voices = window.speechSynthesis.getVoices();
+  const sel = $('selVoice');
+  sel.innerHTML = '';
+  if (!voices.length) { sel.innerHTML = '<option>none available</option>'; return; }
+  voices.forEach((v, i) => {
+    const o = document.createElement('option');
+    o.value = i; o.textContent = v.name + ' — ' + v.lang;
+    sel.appendChild(o);
+  });
+  const saved = LS.get('voice', null);
+  if (saved !== null && voices[saved]) sel.value = saved;
+  else {
+    const pref = voices.findIndex(v => /en(-|_)?(US|GB)/i.test(v.lang) && /google|samantha|daniel|zira|natural|aria/i.test(v.name));
+    sel.value = pref >= 0 ? pref : 0;
+  }
+  state.voice = voices[sel.value] || voices[0];
+}
+if ('speechSynthesis' in window) {
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+  setTimeout(loadVoices, 250);
+}
+
+function cleanForSpeech(t) {
+  return String(t).replace(/```[\s\S]*?```/g, ' code block ')
+    .replace(/[*_`#>|]/g, '').replace(/\[\[tool:[^\]]*\]\]/g, '')
+    .replace(/\s+/g, ' ').trim();
+}
+function speakChunk(text) {
+  if (!state.tts || !('speechSynthesis' in window)) return;
+  const clean = cleanForSpeech(text).slice(0, 600);
+  if (!clean) return;
+  const u = new SpeechSynthesisUtterance(clean);
+  if (state.voice) u.voice = state.voice;
+  u.rate = parseFloat($('rngRate').value) || 1;
+  state.speakQueue++;
+  u.onstart = () => setMode('speaking');
+  u.onend = u.onerror = () => {
+    state.speakQueue = Math.max(0, state.speakQueue - 1);
+    if (!state.speakQueue && state.mode === 'speaking') setMode(state.busy ? 'thinking' : 'idle');
+  };
+  window.speechSynthesis.speak(u);
+}
+function drainSentences(store) {
+  const buf = store.buf, out = [];
+  const re = /[.!?…]+(?=\s|$)|\n+/g;
+  let last = 0, m;
+  while ((m = re.exec(buf)) !== null) {
+    const end = m.index + m[0].length;
+    const s = buf.slice(last, end).trim();
+    if (s) out.push(s);
+    last = end;
+  }
+  store.buf = buf.slice(last);
+  return out;
+}
+const speak = (t) => speakChunk(t);
+function stopSpeech() {
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  state.speakQueue = 0;
+  if (state.mode === 'speaking') setMode(state.busy ? 'thinking' : 'idle');
+}
+
+/* ---------------- Speech in ---------------- */
+function makeRecognition(continuous) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return null;
+  const r = new SR();
+  r.lang = state.lang || 'en-US';
+  r.interimResults = !continuous;
+  r.continuous = !!continuous;
+  return r;
+}
+function toggleListen() {
+  if (state.mode === 'speaking') stopSpeech();
+  if (state.listenPtt) { try { state.recPtt.stop(); } catch (e) {} return; }
+  if (!state.recPtt) state.recPtt = makeRecognition(false);
+  const r = state.recPtt;
+  if (!r) { toast('No speech recognition in this browser. Use Chrome/Edge — or type.'); return; }
+
+  r.onresult = (e) => {
+    let finalTxt = '', interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalTxt += t; else interim += t;
+    }
+    inp.value = finalTxt || interim;
+    if (finalTxt) {
+      state.listening = false;
+      try { r.stop(); } catch (err) {}
+      const said = finalTxt;
+      setTimeout(() => handle(said), 60);
+    }
+  };
+  r.onerror = (e) => {
+    state.listening = false; state.listenPtt = false;
+    $('btnMic').classList.remove('live');
+    if (state.mode === 'listening') setMode('idle');
+    if (e.error === 'not-allowed') toast('Microphone blocked. Allow mic access for this page, then tap the core.', 9000);
+    else if (e.error === 'no-speech') toast('Did not catch that — try again.', 4000);
+    else if (e.error !== 'aborted') toast('Speech error: ' + e.error, 6000);
+  };
+  r.onend = () => {
+    state.listening = false; state.listenPtt = false;
+    $('btnMic').classList.remove('live');
+    if (state.mode === 'listening') setMode('idle');
+    if (state.wake) startWakeLoop();
+  };
+  try {
+    r.start();
+    state.listening = true; state.listenPtt = true;
+    $('btnMic').classList.add('live');
+    setMode('listening');
+  } catch (e) { toast('Could not start listening: ' + e.message, 6000); }
+}
+
+let wakeRunning = false;
+function startWakeLoop() {
+  if (!state.wake || wakeRunning || state.busy) return;
+  if (!state.recWake) {
+    state.recWake = makeRecognition(true);
+    if (!state.recWake) { state.wake = false; updateWakeBtn(); toast('Wake word needs Chrome or Edge.', 6000); return; }
+    state.recWake.onresult = (e) => {
+      const t = e.results[e.results.length - 1][0].transcript.trim();
+      const m = t.match(/^(?:(?:hey|ok|okay)\s+)?jarvis[,\s]*(.*)$/i);
+      if (!m) return;
+      const rest = (m[1] || '').trim();
+      stopWakeLoop();
+      if (rest.length > 1) handle(rest);
+      else setTimeout(toggleListen, 120);
+    };
+    state.recWake.onerror = (e) => {
+      if (e.error === 'not-allowed') { state.wake = false; updateWakeBtn(); toast('Mic blocked — wake word needs permission.', 8000); }
+    };
+    state.recWake.onend = () => {
+      wakeRunning = false;
+      if (state.wake && !state.busy && state.mode !== 'speaking') setTimeout(startWakeLoop, 500);
+    };
+  }
+  try { state.recWake.start(); wakeRunning = true; setStatus('wake word on', 'busy'); } catch (e) { wakeRunning = false; }
+}
+function stopWakeLoop() {
+  if (state.recWake) { try { state.recWake.stop(); } catch (e) {} }
+  wakeRunning = false;
+  if (!state.busy) setStatus(state.engine ? 'ready' : 'commands ready', state.engine ? 'ok' : '');
+}
+function updateWakeBtn() { $('btnWake').classList.toggle('on', state.wake); }
+function toggleWake() {
+  state.wake = !state.wake;
+  updateWakeBtn();
+  if (state.wake) {
+    if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) { toast('Wake word needs Chrome or Edge.', 6000); state.wake = false; updateWakeBtn(); return; }
+    addSys('Wake word on — say “Hey Jarvis”. Uses the mic continuously, so it drains battery.');
+    startWakeLoop();
+  } else { stopWakeLoop(); addSys('Wake word off.'); }
+}
+
+/* ---------------- Skills ---------------- */
+const units = {
+  mi:'mi', mile:'mi', miles:'mi', km:'km', kilometer:'km', kilometers:'km',
+  kg:'kg', kilo:'kg', kilos:'kg', lb:'lb', lbs:'lb', pound:'lb', pounds:'lb',
+  ft:'ft', feet:'ft', foot:'ft', m:'m', meter:'m', meters:'m',
+  in:'in', inch:'in', inches:'in', cm:'cm', gal:'gal', gallon:'gal', gallons:'gal',
+  l:'l', liter:'l', liters:'l', c:'c', f:'f'
+};
+function convertValue(v, u1, u2) {
+  const table = {
+    'mi>km': v*1.60934, 'km>mi': v/1.60934,
+    'kg>lb': v*2.20462, 'lb>kg': v/2.20462,
+    'ft>m': v*0.3048, 'm>ft': v/0.3048,
+    'in>cm': v*2.54, 'cm>in': v/2.54,
+    'gal>l': v*3.78541, 'l>gal': v/3.78541,
+    'c>f': v*9/5+32, 'f>c': (v-32)*5/9
+  };
+  const out = table[u1+'>'+u2];
+  if (out === undefined || isNaN(out)) return null;
+  return parseFloat(out.toFixed(4)).toLocaleString() + ' ' + u2;
+}
+function asMath(raw) {
+  let t = String(raw).toLowerCase().trim();
+  t = t.replace(/^(what(?:'s| is| are)|calculate|calc|compute|solve|how much is|whats)\s+/i, '');
+  t = t.replace(/[?]/g, '').trim();
+  t = t.replace(/\btimes\b|\bmultiplied by\b|\bmultiply\b/g, '*')
+       .replace(/\bplus\b/g, '+')
+       .replace(/\bminus\b|\bless\b/g, '-')
+       .replace(/\bdivided by\b|\bdivide by\b/g, '/')
+       .replace(/\bsquared\b/g, '**2');
+  t = t.replace(/(\d+(?:\.\d+)?)\s*%\s*of\s*(\d+(?:\.\d+)?)/g, '($1/100)*$2');
+  t = t.replace(/[^0-9+\-*/().%^ ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!/[0-9]/.test(t)) return null;
+  if (!/[+\-*/^%]/.test(t)) return null;
+  if (/[+\-*/^%]\s*[+\-*/^%]/.test(t)) return null;
+  if (!/^[\d(]/.test(t) || !/[\d)]$/.test(t)) return null;
+  if (t.length > 120) return null;
+  return t;
+}
+function compute(expr) {
+  try {
+    const v = Function('"use strict";return (' + expr.replace(/\^/g, '**') + ')')();
+    if (typeof v !== 'number' || !isFinite(v)) return null;
+    return Number.isInteger(v) ? v.toLocaleString() : parseFloat(v.toFixed(6)).toLocaleString();
+  } catch (e) { return null; }
+}
+function fleetMath(args) {
+  const n = String(args).split(/[\s,]+/).map(Number).filter(x => !isNaN(x) && x > 0);
+  if (n.length < 2) return 'Usage: fleet <price/day> <days rented per month> [annual insurance] [car cost]\nExample: fleet 65 15 4200 22000';
+  const price = n[0], days = Math.min(n[1], 31), ins = n[2] || 4200, car = n[3] || 22000;
+  const gross = price * days;
+  const platformFee = gross * 0.25;
+  const insurance = ins / 12;
+  const upkeep = gross * 0.07;
+  const depreciation = car / 60;
+  const net = gross - platformFee - insurance - upkeep - depreciation;
+  const margin = gross ? (net / gross * 100) : 0;
+  const payback = net > 0 ? Math.round(car / net) : Infinity;
+  const f = (x) => (x < 0 ? '-$' : '$') + Math.abs(Math.round(x)).toLocaleString();
+  const perDay = price - price * 0.25 - price * 0.07;
+  const fixed = insurance + depreciation;
+  const breakEven = perDay > 0 ? Math.ceil(fixed / perDay) : Infinity;
+  return [
+    'Fleet unit economics — one car', '',
+    'Gross            ' + f(gross) + '   (' + days + ' days × ' + f(price) + ')',
+    'Platform fee     −' + f(platformFee),
+    'Insurance        −' + f(insurance) + '   (annual ' + f(ins) + ')',
+    'Upkeep 7%        −' + f(upkeep),
+    'Depreciation     −' + f(depreciation) + '   (' + f(car) + ' over 60 months)',
+    '─────────────────────────────',
+    'Net per month    ' + f(net) + '   (' + margin.toFixed(1) + '% of gross)',
+    'Break-even       ' + (isFinite(breakEven) ? breakEven + ' rented days/month' : 'impossible at this price'),
+    'Car payback      ' + (isFinite(payback) ? payback + ' months' : 'never — this loses money'), '',
+    net <= 0
+      ? 'Verdict: dead at these numbers. You need ' + (isFinite(breakEven) ? breakEven + ' booked days/month' : 'a different price') + ' just to break even.'
+      : (payback > 36 ? 'Verdict: thin. Over 3 years to recover the car — price or utilisation must improve.'
+                      : 'Verdict: viable on paper. Now prove ' + days + ' days/month with a real listing.')
+  ].join('\n');
+}
+const notesApi = {
+  add(t) { const n = LS.get('notes', []); n.push(t); LS.set('notes', n.slice(-200)); return 'Noted (' + n.length + ' total).'; },
+  list() { const n = LS.get('notes', []); return n.length ? n.map((x, i) => (i + 1) + '. ' + x).join('\n') : 'No notes yet. Say "note …" to add one.'; },
+  clear() { LS.set('notes', []); return 'Notes cleared.'; }
+};
+function setTimer(mins, label) {
+  if (!isFinite(mins) || mins <= 0) return 'That duration does not work.';
+  if (mins > 720) return 'Over 12 hours — use your phone alarm for that.';
+  addSys('⏳ Timer: ' + (mins >= 1 ? Math.round(mins) + ' min' : Math.round(mins * 60) + ' sec') + (label ? ' — ' + label : ''));
+  setTimeout(() => {
+    addMsg('⏰ Timer done' + (label ? ': ' + label : ''), 'sys');
+    speak('Your timer is done.');
+  }, mins * 60 * 1000);
+  return 'Timer set for ' + (mins >= 1 ? mins + ' minute' + (mins === 1 ? '' : 's') : Math.round(mins * 60) + ' seconds') + (label ? ' — ' + label : '') + '.';
+}
+async function factLookup(q) {
+  const key = String(q).toLowerCase().trim();
+  const cache = LS.get('factcache', {});
+  const hit = cache[key];
+  if (hit && Date.now() - hit.at < 86400000) return hit.v;
+
+  const url = 'https://api.duckduckgo.com/?format=json&no_html=1&skip_disambig=1&q=' + encodeURIComponent(q);
+  const res = await fetch(url, { mode: 'cors' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const j = await res.json();
+
+  let ans = null;
+  if (j.Answer) ans = String(j.Answer);
+  else if (j.AbstractText) ans = j.AbstractText + (j.AbstractURL ? '\n' + j.AbstractURL : '');
+  else if (j.Definition) ans = j.Definition;
+  else {
+    const rel = (j.RelatedTopics || []).filter(x => x.Text);
+    if (rel.length) ans = rel.slice(0, 3).map(x => '• ' + x.Text).join('\n');
+  }
+  if (!ans) return null;
+
+  // 24h cache so repeat questions work offline too
+  const store = LS.get('factcache', {});
+  store[key] = { v: ans, at: Date.now() };
+  const keys = Object.keys(store);
+  if (keys.length > 80) {
+    keys.sort((a, b) => (store[a].at || 0) - (store[b].at || 0))
+      .slice(0, keys.length - 80).forEach(k => { delete store[k]; });
+  }
+  LS.set('factcache', store);
+  return ans;
+}
+
+/* ============================================================
+   TEXT-ONLY FALLBACK — no WebGPU needed
+   answers from: corrections → built-in notes → live facts
+   ============================================================ */
+const BUILTIN = [
+  { k: ['turo','earn','booked','utilization','per month','how much'], strong: ['turo'], s: 'Turo host pages, 2025',
+    t: 'Turo reports US hosts average $10,489/year per car — about $874/month gross across roughly 15 booked days — before ownership costs. Hosts keep 70, 80 or 90% of the trip price depending on protection plan, with damage responsibility of $250, $1,500 or $2,750.' },
+  { k: ['insurance','coverage','liability','policy','premium'], strong: ['insurance','liability'], s: 'LendControl / Xero cost guides',
+    t: 'Commercial auto insurance runs about $3,000–$5,000 per vehicle per year (LendControl) while Xero estimates $1,500–$3,000. Get real quotes before buying any car — that spread alone decides whether the business works.' },
+  { k: ['startup','capital','budget','llc','setup','begin'], strong: ['llc','startup','capital'], s: 'LendControl / Xero / PrometAI',
+    t: 'A 5-car independent rental LLC typically needs $110,000–$195,000 to start (gross margin 25–40%, break-even 12–24 months). A 1–3 car operation runs $10,000–$50,000. Vehicles are 60–70% of the total.' },
+  { k: ['break-even','breakeven','profit','margin','pricing','price'], strong: ['break-even','breakeven','margin'], s: 'built-in fleet model',
+    t: 'At $65/day with a 25% platform cut, 7% upkeep, $4,200/year insurance and a $22,000 car over 60 months, break-even is about 17 booked days per month. 15 days loses money. Run fleet <price> <days> [insurance] [car] for your own numbers.' },
+  { k: ['co-host','cohost','manage','someone else','arbitrage'], strong: ['co-host','cohost','arbitrage'], s: 'Turo co-hosting program',
+    t: 'Turo co-hosting lets you manage someone else\u2019s car: the owner keeps 70% of trip price, you keep 30%, with no fleet capital. Owners average roughly $634/month net on that split.' },
+  { k: ['tax','taxes','deduct','deduction','write off','write-off','expense','evasion','avoidance'], strong: ['tax','deduct','evasion','avoidance'], s: 'general principle \u2014 confirm with a local accountant',
+    t: 'Legal tax planning is timing and characterisation, not concealment. Tax avoidance arranges real transactions within the law; evasion misstates facts and is a crime. The line is factual accuracy: every deduction must be ordinary, necessary for the business, and substantiated by records. The levers are timing (depreciation, capital allowances, loss carryforwards, retirement contributions), characterisation (ordinary versus capital, entity choice), and substantiation. I deliberately store no rates, thresholds or limits \u2014 they change every year and a stale number is worse than none.' },
+  { k: ['depreciation','capital allowance','write off','expense','asset','timing'], strong: ['depreciation','capital allowance'], s: 'general principle \u2014 confirm locally',
+    t: 'Depreciation and capital allowances are allocation, not savings: they move tax between years rather than removing it. Accelerating them defers cash out, which is worth the time value of money but is not free money. Expensing a small item immediately versus capitalising it changes timing and the asset base, and the rules that permit it are jurisdiction-specific.' },
+  { k: ['draw','draws','salary','owner pay','distribution','dividend','entity','llc'], strong: ['draw','draws','salary'], s: 'general principle \u2014 confirm locally',
+    t: 'Owner draws are not a deductible expense \u2014 they reduce equity. Genuine salary is deductible and creates payroll obligations. The choice between pass-through and corporate taxation trades double taxation against rate arbitrage and reasonable-compensation rules. Entity choice must be made for real commercial reasons; a structure with no business purpose is the classic audit trigger.' },
+  { k: ['depreciation','industry','competitor','market','competition'], strong: ['depreciation'], s: '2025 US rental industry analysis',
+    t: 'In the US rental industry depreciation eats about 28% of revenue and operating margin averages 8.9%, with debt/equity near 3.2x. Returns come from fleet cost and utilisation, not from headline price.' }
+];
+function hasWebGPU() { return (typeof navigator !== 'undefined') && ('gpu' in navigator); }
+function matchNote(text) {
+  const low = ' ' + String(text).toLowerCase() + ' ';
+  let best = null, bs = 0;
+  BUILTIN.forEach(n => {
+    let s = 0;
+    n.k.forEach(k => { if (low.includes(k)) s += 1; });
+    (n.strong || []).forEach(k => { if (low.includes(k)) s += 2; });
+    if (s > bs) { bs = s; best = n; }
+  });
+  return bs >= 2 ? best : null;
+}
+function cleanQuery(text) {
+  let t = String(text).trim();
+  for (let i = 0; i < 4; i++) {
+    const n = t.replace(/^(who|what|where|when|why|which|how|is|are|was|were|do|does|did|the|a|an|tell me about|define|fact|please)\b[\s,]*/i, '');
+    if (n === t) break;
+    t = n;
+  }
+  return t.replace(/\?+/g, '').replace(/\s+/g, ' ').trim();
+}
+async function compatAnswer(text) {
+  const raw = String(text).trim();
+  const low = raw.toLowerCase();
+
+  /* 1 — what the user taught it (corrections outrank everything) */
+  const top = Brain.top(raw, 1)[0];
+  if (top) {
+    return {
+      text: (top.corrected ? 'From what you taught me:\n' : 'From my notes:\n') + top.a,
+      meta: top.corrected ? 'learned correction' : 'memory'
+    };
+  }
+
+  /* 2 — conversational and meta questions, before any lookup */
+  if (/^(hi|hey|hello|yo|sup|good (morning|afternoon|evening))\b/.test(low))
+    return { text: 'Online and listening. Text mode is on, so I answer from what I know locally — try a command, or ask about your rental numbers.', meta: 'text mode' };
+  if (/who (are|r) you|what are you|your name/.test(low))
+    return { text: 'JARVIS, running entirely on your device. This machine has no local model (iPhone has no WebGPU), so I work from commands, what you have taught me, built-in notes and live instant facts.', meta: 'text mode' };
+  if (/what can you do|^help$|commands\?*$/.test(low))
+    return { text: 'Commands: calc, fleet, convert, timer, note, remember, learn, fact, time, date, export, clear. Plus anything I have learned, and instant facts. Ask \u201cwhat have you learned\u201d to see my memory.', meta: 'text mode' };
+  if (/can you (hear|talk|speak|listen)/.test(low))
+    return { text: 'Yes — tap the core or the mic and speak. Voice in and out works on iPhone even though the AI model does not.', meta: 'text mode' };
+  if (/thank|thanks|cheers/.test(low))
+    return { text: 'Any time.', meta: 'text mode' };
+
+  /* 3 — built-in researched notes */
+  const note = matchNote(raw);
+  if (note) return { text: note.t + '\n(source: ' + note.s + ')', meta: 'built-in note' };
+
+  /* 4 — live instant facts, only for actual lookups */
+  const isLookup = /^(who|what|where|when|which|define|tell me about|fact)\b/i.test(raw);
+  if (state.facts && isLookup) {
+    const q = cleanQuery(raw);
+    if (q.length > 2 && q.length < 90) {
+      try {
+        const f = await factLookup(q);
+        if (f) return { text: f + '\n(instant answer)', meta: 'live fact' };
+      } catch (e) {}
+    }
+  }
+
+  /* 5 — honest fallback, with the way forward */
+  return {
+    text: 'I cannot reason about that on this device: there is no local model here, so open-ended questions fall outside what I can do.\n\nWhat still works: commands (calc, fleet, convert, timer, note, remember), everything I have already learned, and live instant facts. Teach me directly with \u201clearn: <what I should know>\u201d and I will use it from then on \u2014 including the next time you ask this.',
+    meta: 'text mode'
+  };
+}
+
+function typeOut(bubble, text) {
+  return new Promise(resolve => {
+    let i = 0;
+    const step = () => {
+      i = Math.min(text.length, i + 4);
+      bubble.set(text.slice(0, i));
+      if (i < text.length) setTimeout(step, 18); else resolve();
+    };
+    step();
+  });
+}
+
+async function compatReply(text) {
+  if (state.busy) return;
+  state.busy = true;
+  setSendMode('stop');
+  setMode('thinking');
+  const bubble = addMsg('', 'bot');
+  bubble.el.classList.add('cursor');
+  try {
+    const ans = await compatAnswer(text);
+    await typeOut(bubble, ans.text);
+    bubble.el.classList.remove('cursor');
+    bubble.meta(ans.meta);
+    bubble.addFeedback(text, ans.text);
+    saveChat('bot', ans.text, ans.meta);
+    state.history.push({ role: 'assistant', content: ans.text });
+    speak(ans.text);
+  } catch (e) {
+    bubble.el.remove();
+    toast('Text mode error: ' + (e && e.message ? e.message : e), 6000);
+  } finally {
+    state.busy = false;
+    setSendMode('send');
+    if (state.mode === 'thinking') setMode('idle');
+    if (state.wake) setTimeout(startWakeLoop, 700);
+  }
+}
+
+/* ---------------- Router ---------------- */
+function route(text) {
+  const t = String(text).trim();
+  const low = t.toLowerCase();
+  let m;
+
+  // a pending 👎 means the next message is the correction
+  if (state.pendingFix && Date.now() - state.pendingFix.at < 120000) {
+    const fix = { q: state.pendingFix.question, at: Date.now() };
+    if (!/^(stop|help|clear|export|notes?|time|date)$/.test(low)) {
+      Brain.correct(fix.q, t);
+      state.pendingFix = null;
+      return { kind: 'reply', text: 'Correction stored. I will use that instead of my old answer every time this comes up.' };
+    }
+    state.pendingFix = null;
+  }
+
+  if (/^(stop|shut up|quiet|silence)$/.test(low)) { stopSpeech(); return { kind: 'handled' }; }
+  if (/^(help|commands|what can you do)[\?]?$/.test(low)) {
+    $('sheetHelp').classList.add('open');
+    return { kind: 'reply', text: 'Commands are on screen — calc, fleet, convert, timer, note, remember, learn, fact, time, date — plus any question for the model.' };
+  }
+  if (low === 'clear') { logEl.innerHTML = ''; state.history = []; LS.del('chat'); return { kind: 'handled' }; }
+  if (low === 'export') { exportChat(); return { kind: 'reply', text: 'Chat exported as a text file.' }; }
+
+  // learning
+  if ((m = t.match(/^(?:learn|correct)[:\s]+(.+)$/i))) {
+    Brain.correct('user correction', m[1]);
+    return { kind: 'reply', text: 'Learned: ' + m[1] + '\nI will apply that from now on.' };
+  }
+  if (/^(what have you learned|learning|what do you know|how much have you learned)[\?]?$/.test(low)) {
+    const items = Brain.items();
+    const fixed = items.filter(i => i.corrected).length;
+    if (!items.length) return { kind: 'reply', text: 'Nothing learned yet. Answers I give get stored automatically, and 👎 + a correction teaches me directly.' };
+    const recent = items.slice(-5).filter(i => i.corrected).map(i => '• ' + i.a.slice(0, 120));
+    return { kind: 'reply', text: 'I hold ' + items.length + ' learned item' + (items.length === 1 ? '' : 's') + ', ' + fixed + ' of them corrections.' + (recent.length ? '\n\nLatest corrections:\n' + recent.join('\n') : '') + '\n\nAsk "what do you remember" for facts you told me.' };
+  }
+  if (/^(forget learning|clear learning|reset learning)$/.test(low)) { Brain.clear(); return { kind: 'reply', text: 'Learning store cleared.' }; }
+  if (low === 'prune learning') { const n = Brain.prune(); return { kind: 'reply', text: 'Pruned ' + n + ' weak or disliked items.' }; }
+
+  // fleet
+  if (/^(fleet|rental|car rental|car)$/.test(low)) return { kind: 'reply', text: fleetMath('') };
+  if ((m = t.match(/^(?:fleet|rental)\s+(.+)$/i))) return { kind: 'reply', text: fleetMath(m[1]) };
+
+  // notes
+  if ((m = t.match(/^note[s]?[:\s]\s*(.+)$/i))) return { kind: 'reply', text: notesApi.add(m[1]) };
+  if (/^(notes|my notes|show notes|list notes)$/.test(low)) return { kind: 'reply', text: notesApi.list() };
+  if (/^(clear notes|delete notes)$/.test(low)) return { kind: 'reply', text: notesApi.clear() };
+
+  // memory
+  if ((m = t.match(/^remember(?: that)?[:\s]\s*(.+)$/i))) {
+    const mem = LS.get('memory', []); mem.push(m[1]); LS.set('memory', mem.slice(-100)); updateMem();
+    return { kind: 'reply', text: 'Remembered. I now hold ' + mem.length + ' fact' + (mem.length === 1 ? '' : 's') + '.' };
+  }
+  if (/^(what do you remember|recall|memory|what have you remembered)[\?]?$/.test(low)) {
+    const mem = LS.get('memory', []);
+    return { kind: 'reply', text: mem.length ? 'What I remember:\n' + mem.map(x => '• ' + x).join('\n') : 'You have not told me anything to remember yet.' };
+  }
+
+  // timer
+  if ((m = low.match(/(?:set (?:a )?timer(?: for)?|remind me in|timer)\s*(\d+(?::\d+)?)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)?(?:\s+(?:to|for|about)\s+(.+))?/))) {
+    const n = parseFloat(m[1]);
+    const unit = m[2] || 'minutes';
+    const mins = /^s/.test(unit) ? n / 60 : (/^h/.test(unit) ? n * 60 : n);
+    return { kind: 'reply', text: setTimer(mins, m[3] ? m[3].trim() : '') };
+  }
+
+  // conversion
+  if ((m = t.match(/(\d+(?:\.\d+)?)\s*(mi|miles?|km|kilometers?|kg|kilos?|lbs?|pounds?|ft|feet|foot|m|meters?|in|inch(?:es)?|cm|gal(?:lons?)?|l|liters?|c|f)\s*(?:to|in|into)\s*(mi|miles?|km|kilometers?|kg|kilos?|lbs?|pounds?|ft|feet|foot|m|meters?|in|inch(?:es)?|cm|gal(?:lons?)?|l|liters?|c|f)\b/i))) {
+    const u1 = units[m[2].toLowerCase()] || m[2].toLowerCase();
+    const u2 = units[m[3].toLowerCase()] || m[3].toLowerCase();
+    const out = convertValue(parseFloat(m[1]), u1, u2);
+    const disp = (u) => (u === 'c' || u === 'f') ? u.toUpperCase() : u;
+    return { kind: 'reply', text: out ? m[1] + ' ' + disp(u1) + ' = ' + out.replace(new RegExp(' ' + u2 + '$'), ' ' + disp(u2))
+                                     : 'I can convert mi/km, kg/lb, ft/m, in/cm, gal/L, C/F.' };
+  }
+
+  if (/\b(what(?:'s| is)? the time|what time is it|time is it|current time)\b/.test(low))
+    return { kind: 'reply', text: 'It is ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '.' };
+  if (/\b(what(?:'s| is)? (?:the |today's )?date|what day is it|todays date|today's date)\b/.test(low))
+    return { kind: 'reply', text: 'Today is ' + new Date().toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + '.' };
+
+  if ((m = low.match(/^(?:calc(?:ulate)?|compute)\s+(.+)$/))) {
+    const expr = asMath(m[1]), v = expr && compute(expr);
+    if (v !== null) return { kind: 'reply', text: m[1].trim() + ' = ' + v };
+  }
+  {
+    const expr = asMath(t);
+    if (expr) { const v = compute(expr); if (v !== null) return { kind: 'reply', text: expr + ' = ' + v }; }
+  }
+
+  if ((m = t.match(/^(?:search|google|look up)\s+(.+)$/i))) {
+    window.open('https://duckduckgo.com/?q=' + encodeURIComponent(m[1]), '_blank', 'noopener');
+    return { kind: 'reply', text: 'Opened a search for "' + m[1] + '" in a new tab. I cannot read the results myself.' };
+  }
+  if ((m = t.match(/^(?:fact|who is|what is|what are|define|tell me about)\s+(.+)$/i)) && state.facts) {
+    const q = m[1].replace(/\?+$/, '').trim();
+    if (q.length > 2 && q.length < 90 && !/^(the )?(weather|news|price|stock)/i.test(q)) return { kind: 'fact', query: q };
+  }
+  return { kind: 'model' };
+}
+
+/* ---------------- Tools ---------------- */
+function runTool(call) {
+  const raw = String(call).trim();
+  const [name, ...rest] = raw.split(/\s+/);
+  const args = rest.join(' ');
+  switch ((name || '').toLowerCase()) {
+    case 'calc': { const e = asMath(args), v = e && compute(e); return v === null ? 'calc failed for: ' + args : args + ' = ' + v; }
+    case 'fleet': return fleetMath(args);
+    case 'convert': {
+      const m = args.match(/(\d+(?:\.\d+)?)\s*([a-z]+)\s*(?:to|in|into)\s*([a-z]+)/i);
+      if (!m) return 'convert needs: <number> <unit> to <unit>';
+      const u1 = units[m[2].toLowerCase()] || m[2], u2 = units[m[3].toLowerCase()] || m[3];
+      const out = convertValue(parseFloat(m[1]), u1, u2);
+      return out ? m[1] + ' ' + u1 + ' = ' + out : 'unsupported conversion';
+    }
+    case 'time': return 'It is ' + new Date().toLocaleTimeString() + '.';
+    case 'date': return 'Today is ' + new Date().toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + '.';
+    case 'note': return notesApi.add(args);
+    case 'notes': return notesApi.list();
+    case 'remember': { const mem = LS.get('memory', []); mem.push(args); LS.set('memory', mem.slice(-100)); updateMem(); return 'remembered: ' + args; }
+    default: return 'unknown tool "' + name + '"';
+  }
+}
+function extractToolCalls(text) {
+  const out = []; const re = /\[\[\s*tool\s*:\s*([^\]]+)\]\]/gi; let m;
+  while ((m = re.exec(text)) !== null) out.push(m[1].trim());
+  return out;
+}
+const stripToolCalls = (t) => String(t).replace(/\[\[\s*tool\s*:[^\]]+\]\]/gi, '').replace(/\n{3,}/g, '\n\n').trim();
+
+/* ---------------- Model ---------------- */
+const STATIC_MODELS = [
+  { id: 'Qwen2.5-0.5B-Instruct-q4f32_1-MLC', label: 'Qwen 0.5B — fastest', mb: 400 },
+  { id: 'Llama-3.2-1B-Instruct-q4f32_1-MLC', label: 'Llama 3.2 1B — balanced', mb: 800 },
+  { id: 'Llama-3.2-3B-Instruct-q4f32_1-MLC', label: 'Llama 3.2 3B — smarter', mb: 2000 }
+];
+let modelList = STATIC_MODELS.slice();
+
+function isMobile() { return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent); }
+function lowMemory() {
+  const dm = navigator.deviceMemory;
+  return (typeof dm === 'number' && dm <= 4) || isMobile();
+}
+
+function fillModelSelect() {
+  const sel = $('selModel');
+  let cur = LS.get('model', null);
+  if (!cur) cur = lowMemory() ? STATIC_MODELS[0].id : STATIC_MODELS[1].id;
+  sel.innerHTML = '';
+  const seen = new Set();
+  modelList.forEach(m => {
+    if (seen.has(m.id)) return;
+    seen.add(m.id);
+    const o = document.createElement('option');
+    o.value = m.id;
+    o.textContent = m.label + (m.mb ? ' (~' + (m.mb >= 1000 ? (m.mb / 1000).toFixed(1) + ' GB' : m.mb + ' MB') + ')' : '');
+    sel.appendChild(o);
+  });
+  sel.value = seen.has(cur) ? cur : (modelList[0] && modelList[0].id) || '';
+  $('modelNote').textContent = lowMemory()
+    ? 'This device looks mobile or low-RAM — starting with the smallest model.'
+    : 'Larger = smarter, slower, more RAM';
+}
+
+async function fetchModelList() {
+  try {
+    const webllm = await import('https://esm.run/@mlc-ai/web-llm');
+    const cfg = webllm.prebuiltAppConfig || (webllm.default && webllm.default.prebuiltAppConfig);
+    const list = (cfg && cfg.model_list) || [];
+    const usable = list
+      .filter(m => m.model_id && !/embed|vision|clip|sdxl|stable/i.test(m.model_id))
+      .filter(m => /Instruct|chat|it/i.test(m.model_id))
+      .map(m => ({
+        id: m.model_id,
+        label: m.model_id.replace(/-q4f32_1-MLC|MLC|Instruct/g, '').replace(/-+/g, ' ').trim(),
+        mb: m.vram_required_MB || 0
+      }))
+      .sort((a, b) => (a.mb || 0) - (b.mb || 0));
+    if (usable.length > 5) { modelList = usable; fillModelSelect(); }
+    return true;
+  } catch (e) { return false; }
+}
+
+const SYSTEM = [
+  'You are JARVIS, a concise assistant running entirely on the user\'s device.',
+  'RULES:',
+  '1. Answer in at most 4 short sentences unless the user asks for detail.',
+  '2. You cannot browse the web, control devices, or perform real-world actions. Say so briefly if asked.',
+  '3. Never invent numbers. If arithmetic, money, unit conversion, dates or times are involved, call a tool instead of guessing.',
+  '4. Tool call format: output EXACTLY one line like [[tool: calc 18*450/12]] and nothing else, then stop. Tools: calc <expression>, fleet <price_per_day> <days_per_month> [annual_insurance] [car_cost], convert <n> <unit> to <unit>, time, date, note <text>, notes, remember <fact>.',
+  '5. If unsure about a fact, say you are unsure.',
+  '6. Anything marked [CORRECTION — MUST FOLLOW] overrides your own defaults permanently.',
+  '7. No markdown headings, tables, or bullet lists. Plain conversational sentences.'
+].join('\n');
+
+function systemFor(question) {
+  const style = LS.get('style', 'normal');
+  const styleRule = style === 'brief' ? '1. Answer in one or two sentences only.'
+    : style === 'detail' ? '1. Answer thoroughly — up to eight sentences, with the reasoning that matters.'
+    : '1. Answer in at most 4 short sentences unless the user asks for detail.';
+  const base = SYSTEM.replace(/^1\..*$/m, styleRule);
+  const ctx = Brain.context(question);
+  return ctx ? base + '\n\nUSER CONTEXT (authoritative, from earlier sessions):\n' + ctx : base;
+}
+function trimHistory(messages, maxChars) {
+  const budget = maxChars || 4000;
+  let total = 0, out = [];
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const len = (messages[i].content || '').length;
+    if (total + len > budget) break;
+    out.unshift(messages[i]);
+    total += len;
+  }
+  return out;
+}
+
+function setSendMode(mode) {
+  const b = $('btnSend');
+  if (!b) return;
+  if (mode === 'stop') { b.textContent = 'STOP'; b.classList.add('stop'); b.disabled = false; }
+  else { b.textContent = 'SEND'; b.classList.remove('stop'); b.disabled = false; }
+}
+function interruptGeneration() {
+  state.stopRequested = true;
+  try { if (state.engine && typeof state.engine.interruptGenerate === 'function') state.engine.interruptGenerate(); } catch (e) {}
+  stopSpeech();
+  toast('Stopped.', 2500);
+}
+
+async function ensureEngine(onProgress) {
+  const custom = (LS.get('customModel', '') || '').trim();
+  const id = custom || $('selModel').value;
+  if (state.engine && state.engineId === id) return state.engine;
+  if (state.loading) throw new Error('already-loading');
+  state.loading = true;
+  setStatus('loading 0%', 'busy');
+  try {
+    const webllm = await import('https://esm.run/@mlc-ai/web-llm');
+    if (state.engine) { try { await state.engine.unload(); } catch (e) {} state.engine = null; state.engineId = null; }
+    const engine = await webllm.CreateMLCEngine(id, {
+      initProgressCallback: (p) => {
+        const pct = Math.round((p.progress || 0) * 100);
+        setStatus('loading ' + pct + '%', 'busy');
+        if (onProgress) onProgress(pct, p.text || '');
+      }
+    });
+    state.engine = engine; state.engineId = id;
+    setStatus('ready', 'ok');
+    return engine;
+  } finally { state.loading = null; }
+}
+
+async function streamReply(messages, onDelta) {
+  const engine = await ensureEngine();
+  const chunks = await engine.chat.completions.create({ messages, temperature: 0.6, max_tokens: 340, stream: true });
+  let full = '';
+  for await (const ch of chunks) {
+    if (state.stopRequested) break;
+    const d = (ch.choices && ch.choices[0] && ch.choices[0].delta && ch.choices[0].delta.content) || '';
+    if (d) { full += d; onDelta(d, full); }
+  }
+  return full;
+}
+
+/* ---------------- Main handler ---------------- */
+async function handle(raw) {
+  const text = String(raw || '').trim();
+  if (!text || state.busy) return;
+  inp.value = '';
+
+  addMsg(text, 'user');
+  saveChat('user', text, '');
+  state.history.push({ role: 'user', content: text });
+  if (state.history.length > 16) state.history = state.history.slice(-16);
+
+  const r = route(text);
+  if (r.kind === 'handled') return;
+
+  if (r.kind === 'reply') {
+    addMsg(r.text, 'bot', 'local engine');
+    saveChat('bot', r.text, 'local engine');
+    speak(r.text);
+    return;
+  }
+
+  if (r.kind === 'fact') {
+    setMode('thinking');
+    const t = addMsg('…', 'bot');
+    try {
+      const ans = await factLookup(r.query);
+      if (ans) {
+        const full = ans + '\n(instant answer — not a full web search)';
+        t.set(full); t.meta('live fact');
+        saveChat('bot', full, 'live fact');
+        speak(ans);
+        state.history.push({ role: 'assistant', content: full });
+        return;
+      }
+      t.el.remove();
+    } catch (e) {
+      t.el.remove();
+      addSys('Live facts unavailable (' + (e && e.message ? e.message.slice(0, 60) : 'network') + '). Asking the local model instead.');
+    }
+    if (state.mode === 'thinking') setMode('idle');
+  }
+
+  if (state.compat) { await compatReply(text); return; }
+
+  state.busy = true;
+  state.stopRequested = false;
+  setSendMode('stop');
+  setMode('thinking');
+  const bubble = addMsg('', 'bot');
+  bubble.el.classList.add('cursor');
+  state.ttsBuf.buf = '';
+
+  let acc = '';
+  try {
+    const msgs = [{ role: 'system', content: systemFor(text) }].concat(trimHistory(state.history, 4000));
+    const full = await streamReply(msgs, (d) => {
+      acc += d;
+      bubble.set(stripToolCalls(acc));
+      state.ttsBuf.buf += d;
+      drainSentences(state.ttsBuf).forEach(speakChunk);
+      if (state.mode === 'thinking' && acc.trim()) setMode('speaking');
+    });
+    bubble.el.classList.remove('cursor');
+
+    const calls = extractToolCalls(full);
+    let finalText = stripToolCalls(full);
+    if (calls.length) {
+      const results = calls.map(c => {
+        const out = runTool(c);
+        addTool('[[' + c + ']]\n' + out);
+        return 'TOOL ' + c + ' RESULT:\n' + out;
+      });
+      const follow = [{ role: 'system', content: systemFor(text) }]
+        .concat(trimHistory(state.history, 3000))
+        .concat([{ role: 'assistant', content: stripToolCalls(full) || '(tool requested)' }])
+        .concat([{ role: 'user', content: 'Tool output, authoritative — use it and answer in 1-3 sentences:\n' + results.join('\n\n') }]);
+      let acc2 = '';
+      bubble.set('');
+      bubble.el.classList.add('cursor');
+      const full2 = await streamReply(follow, (d) => {
+        acc2 += d;
+        bubble.set(stripToolCalls(acc2));
+        state.ttsBuf.buf += d;
+        drainSentences(state.ttsBuf).forEach(speakChunk);
+      });
+      bubble.el.classList.remove('cursor');
+      finalText = stripToolCalls(full2).trim() || finalText;
+    }
+    if (state.ttsBuf.buf.trim()) speakChunk(state.ttsBuf.buf);
+    state.ttsBuf.buf = '';
+
+    if (!finalText.trim()) finalText = '(the model returned nothing — try a shorter question)';
+    bubble.set(finalText);
+    bubble.meta(state.engineId ? state.engineId.replace(/-q4f32_1-MLC$/, '') : 'local model');
+    bubble.addFeedback(text, finalText);
+    saveChat('bot', finalText, 'model');
+    Brain.add(text, finalText);
+    state.history.push({ role: 'assistant', content: finalText });
+  } catch (e) {
+    bubble.el.remove();
+    const msg = String((e && e.message) || e);
+    if (/already-loading/.test(msg)) toast('The model is still loading — one moment.', 4000);
+    else if (/webgpu|gpu|adapter|not supported|device lost|no adapter/i.test(msg)) {
+      setStatus('text mode', 'busy');
+      state.compat = true;
+      if ($('chkCompat')) $('chkCompat').checked = true;
+      addSys('This device cannot run the local model (no WebGPU) — switching to text mode automatically.\nChat still works here: I answer from what I have learned, built-in notes and live instant facts. Voice in and out stays on.');
+      toast('Switched to text mode — chat still works without the model.', 8000);
+      setTimeout(() => compatReply(text), 500);
+      return;
+    } else if (/fetch|network|Failed to load|import|dynamically imported/i.test(msg)) {
+      setStatus('offline', 'err');
+      addSys('Could not download the model. Check your connection once — after that it is cached locally. Commands still work.');
+      toast('Model download failed. Check your connection.', 8000);
+    } else {
+      setStatus('error', 'err');
+      addSys('Model error: ' + msg.slice(0, 200));
+      toast('Model error: ' + msg.slice(0, 120), 8000);
+    }
+  } finally {
+    state.busy = false;
+    state.stopRequested = false;
+    setSendMode('send');
+    if (state.mode === 'thinking') setMode('idle');
+    if (state.wake) setTimeout(startWakeLoop, 700);
+  }
+}
+
+/* ---------------- Utilities ---------------- */
+function updateMem() {
+  const n = LS.get('memory', []).length;
+  $('memCount').textContent = n + ' fact' + (n === 1 ? '' : 's') + ' stored';
+}
+function updateLearn() {
+  const n = Brain.items().length;
+  const c = Brain.items().filter(i => i.corrected).length;
+  $('learnCount').textContent = n + ' learned' + (c ? ', ' + c + ' correction' + (c === 1 ? '' : 's') : '');
+}
+function exportChat() {
+  const h = LS.get('chat', []);
+  const lines = h.map(m => '[' + new Date(m.at).toLocaleString() + '] ' + m.who.toUpperCase() + ': ' + m.text);
+  const blob = new Blob(['JARVIS chat export\n' + new Date().toString() + '\n\n' + lines.join('\n\n')], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'jarvis-chat-' + new Date().toISOString().slice(0, 10) + '.txt';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+async function diagnostics() {
+  const d = $('diag');
+  d.textContent = 'checking…';
+  const lines = [];
+  lines.push('browser: ' + navigator.userAgent.slice(0, 90));
+  lines.push('mobile: ' + isMobile() + '  lowMemory: ' + lowMemory());
+  lines.push('webgpu: ' + (('gpu' in navigator) ? 'present' : 'MISSING'));
+  try {
+    if ('gpu' in navigator) {
+      const ad = await navigator.gpu.requestAdapter();
+      lines.push('adapter: ' + (ad ? 'ok' : 'none (no compatible GPU)'));
+      if (ad && ad.info) lines.push('gpu: ' + (ad.info.vendor || '?') + ' ' + (ad.info.architecture || ''));
+    }
+  } catch (e) { lines.push('adapter: error ' + e.message); }
+  lines.push('model loaded: ' + (state.engineId || 'none'));
+  lines.push('selected: ' + $('selModel').value);
+  lines.push('speech in: ' + !!(window.SpeechRecognition || window.webkitSpeechRecognition));
+  lines.push('speech out: ' + ('speechSynthesis' in window) + '  voices: ' + voices.length);
+  lines.push('learned items: ' + Brain.items().length);
+  lines.push('text mode: ' + state.compat);
+  lines.push('offline shell: ' + (state.shell ? 'cached' : (location.protocol === 'file:' ? 'n/a on file://' : 'not registered')));
+  lines.push('saved messages: ' + LS.get('chat', []).length);
+  try {
+    if (navigator.storage && navigator.storage.estimate) {
+      const est = await navigator.storage.estimate();
+      lines.push('storage: ' + (est.usage / 1048576).toFixed(0) + ' MB used of ' + (est.quota / 1073741824).toFixed(1) + ' GB');
+    }
+  } catch (e) {}
+  d.textContent = lines.join('\n');
+}
+
+/* ---------------- Install hint ---------------- */
+function setupInstall() {
+  const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator && window.navigator.standalone);
+  if (standalone || !isMobile() || LS.get('installHidden', false)) return;
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  $('installText').innerHTML = isIOS
+    ? 'Add JARVIS to your home screen: <b>Share ⤴ → Add to Home Screen</b>.'
+    : 'Install JARVIS: <b>Chrome ⋮ → Add to Home screen</b>.';
+  $('installBar').classList.add('show');
+  $('btnInstall').onclick = () => $('sheetHelp').classList.add('open');
+  $('btnInstallClose').onclick = () => { $('installBar').classList.remove('show'); LS.set('installHidden', true); };
+}
+
+/* ---------------- Offline app shell ---------------- */
+async function setupOffline() {
+  if (!('serviceWorker' in navigator)) { state.shell = false; return false; }
+  if (location.protocol === 'file:') { state.shell = false; return false; }
+  try {
+    await navigator.serviceWorker.register('sw.js', { scope: './' });
+    state.shell = true;
+    return true;
+  } catch (e) {
+    state.shell = false;
+    return false;
+  }
+}
+
+/* ---------------- Wiring ---------------- */
+$('btnSend').addEventListener('click', () => {
+  if (state.busy) { if (state.engine) interruptGeneration(); else toast('Still working — one moment.', 3000); return; }
+  handle(inp.value);
+});
+inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') handle(inp.value); });
+$('btnMic').addEventListener('click', toggleListen);
+core.addEventListener('click', toggleListen);
+$('btnSet').addEventListener('click', () => { $('sheetSet').classList.add('open'); updateMem(); updateLearn(); });
+$('btnHelp').addEventListener('click', () => $('sheetHelp').classList.add('open'));
+$('btnWake').addEventListener('click', toggleWake);
+$('btnDiag').addEventListener('click', diagnostics);
+$('btnExport').addEventListener('click', exportChat);
+$('btnPrune').addEventListener('click', () => { const n = Brain.prune(); addSys('Pruned ' + n + ' weak items from learning.'); });
+$('btnUnload').addEventListener('click', async () => {
+  if (state.engine) { try { await state.engine.unload(); } catch (e) {} }
+  state.engine = null; state.engineId = null;
+  setStatus('commands ready');
+  addSys('Model unloaded — GPU memory freed. The next question reloads it from cache.');
+});
+document.querySelectorAll('.sheet').forEach(s => s.addEventListener('click', (e) => { if (e.target === s) s.classList.remove('open'); }));
+$('chkTTS').checked = state.tts;
+$('chkTTS').addEventListener('change', (e) => { state.tts = e.target.checked; LS.set('tts', state.tts); if (!state.tts) stopSpeech(); });
+$('chkFacts').checked = state.facts;
+$('chkFacts').addEventListener('change', (e) => { state.facts = e.target.checked; LS.set('facts', state.facts); });
+$('chkLearn').checked = state.learn;
+$('chkLearn').addEventListener('change', (e) => { state.learn = e.target.checked; LS.set('learn_on', state.learn); });
+$('chkCompat').checked = state.compat;
+$('compatNote').textContent = hasWebGPU()
+  ? 'Auto: off — this device can run the model'
+  : 'Auto: on — no WebGPU here, so text mode answers from memory';
+$('chkCompat').addEventListener('change', (e) => {
+  state.compat = e.target.checked;
+  LS.set('compat', state.compat);
+  setStatus(state.compat ? 'text mode' : 'commands ready', state.compat ? 'busy' : '');
+  addSys(state.compat
+    ? 'Text mode on — no model is loaded. I answer from what you taught me, built-in notes and live facts. Voice still works.'
+    : 'Model mode on — the next question loads the on-device model.');
+});
+$('selVoice').addEventListener('change', (e) => { state.voice = voices[+e.target.value]; LS.set('voice', +e.target.value); });
+$('selStyle').value = LS.get('style', 'normal');
+$('selStyle').addEventListener('change', (e) => { LS.set('style', e.target.value); toast('Answer style: ' + e.target.value + '.', 2500); });
+$('selLang').value = LS.get('lang', 'en-US');
+$('selLang').addEventListener('change', (e) => { state.lang = e.target.value; LS.set('lang', state.lang); if (state.recPtt) state.recPtt.lang = state.lang; if (state.recWake) state.recWake.lang = state.lang; toast('Voice language: ' + e.target.value, 2500); });
+$('inpModel').value = LS.get('customModel', '');
+$('inpModel').addEventListener('change', async (e) => {
+  const v = e.target.value.trim();
+  LS.set('customModel', v);
+  if (state.engine) { try { await state.engine.unload(); } catch (err) {} state.engine = null; state.engineId = null; }
+  toast(v ? 'Custom model set — the next question loads it.' : 'Custom model cleared.', 4000);
+});
+$('rngRate').addEventListener('change', (e) => LS.set('rate', e.target.value));
+$('rngRate').value = LS.get('rate', 1);
+$('selModel').addEventListener('change', async (e) => {
+  LS.set('model', e.target.value);
+  if (state.engine) {
+    try { await state.engine.unload(); } catch (err) {}
+    state.engine = null; state.engineId = null;
+    addSys('Model switched. GPU memory from the old model was released; the next question loads the new one.');
+  }
+});
+$('btnWipe').addEventListener('click', () => {
+  ['memory', 'notes', 'chat', 'learned'].forEach(k => LS.del(k));
+  state.history = []; logEl.innerHTML = ''; updateMem(); updateLearn();
+  addSys('Memory, notes, learning and conversation cleared.');
+});
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.code === 'Space') { e.preventDefault(); toggleListen(); }
+  if (e.code === 'Escape') { stopSpeech(); document.querySelectorAll('.sheet').forEach(s => s.classList.remove('open')); }
+});
+
+[['help', 'help'], ['what have you learned', 'learned'], ['notes', 'notes'], ['fleet 65 15 4200 22000', 'fleet check']].forEach(([cmd, label]) => {
+  const b = document.createElement('button');
+  b.className = 'chip'; b.textContent = label;
+  b.addEventListener('click', () => handle(cmd));
+  $('chips').appendChild(b);
+});
+
+fillModelSelect();
+updateMem(); updateLearn(); updateWakeBtn();
+setMode('idle');
+setSendMode('send');
+setStatus(state.compat ? 'text mode' : 'commands ready', state.compat ? 'busy' : '');
+setupInstall();
+setupOffline();
+if (!renderSavedChat()) {
+  addMsg(state.compat
+    ? 'JARVIS online in text mode.\n\nThis device has no WebGPU, so no model is loaded — instead I answer from what you teach me, built-in business notes, and live instant facts. Voice in and out works normally.\n\nTry: "fleet 65 15 4200 22000", "what insurance do i need", or teach me with "learn: my target market is Phoenix".'
+    : 'JARVIS online.\n\nTap the core to talk, or type. I run on this device — free, no account, no key.\n\nThe first real question downloads a small model once. Until then commands like "fleet 65 15" and "what\'s 18 times 450" work instantly.\n\nI learn as we go: every answer is stored, 👎 plus a correction teaches me, and I retrieve what is relevant before each reply.', 'bot', 'local');
+}
+fetchModelList();
+</script>
+</body>
+</html>
