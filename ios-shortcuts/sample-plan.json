@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "id": "pln_20261030_0420_k7m2",
+  "created": "2026-10-30T04:20:00Z",
+  "expires": "2026-10-30T05:20:00Z",
+  "intent": "Start the rental workday: focus on, open the fleet sheet, capture the vehicle-2 cheque reminder, log the insurance premium.",
+  "actions": [
+    { "id": "a1", "name": "setFocus", "args": { "mode": "Work" }, "confirm": false },
+    { "id": "a2", "name": "speak", "args": { "text": "Morning. Vehicle two is at eighteen booked days this month." }, "confirm": false },
+    { "id": "a3", "name": "openURL", "args": { "url": "https://docs.google.com/spreadsheets/d/fleet-placeholder" }, "confirm": false },
+    { "id": "a4", "name": "createReminder", "args": { "title": "Chase vehicle 2 insurance quote", "due": "2026-10-30T16:00:00Z" }, "confirm": false },
+    { "id": "a5", "name": "logExpense", "args": { "amount": 200, "category": "insurance", "note": "monthly accrual on 2400 annual" }, "confirm": false },
+    { "id": "a6", "name": "sendMessage", "args": { "to": "+15555550100", "body": "Confirming the 2400 annual premium for vehicle two." }, "confirm": true }
+  ]
+}
