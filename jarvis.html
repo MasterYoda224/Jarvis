@@ -282,6 +282,10 @@
       </select>
     </div>
     <div class="field">
+      <label>Sync endpoint<small>Mailbox URL for the iOS Shortcuts bridge</small></label>
+      <input class="txt" id="inpSync" placeholder="https://…workers.dev/SECRET" aria-label="Sync endpoint URL">
+    </div>
+    <div class="field">
       <label>Custom model id<small>Advanced — overrides the list above</small></label>
       <input class="txt" id="inpModel" placeholder="e.g. Phi-3.5-mini-instruct-q4f32_1-MLC" aria-label="Custom model id">
     </div>
@@ -478,6 +482,13 @@ const Brain = {
     const rec = { q: key, a: String(answer).slice(0, 1200), at: Date.now(), up: 0, down: 0 };
     if (existing >= 0) { rec.up = items[existing].up || 0; items[existing] = rec; }
     else items.push(rec);
+    this.setItems(items);
+    updateLearn();
+  },
+
+  fact(q, a) {
+    const items = this.items();
+    items.push({ q: String(q || 'automation').toLowerCase().trim().slice(0, 90), a: String(a).slice(0, 800), at: Date.now(), up: 1, down: 0 });
     this.setItems(items);
     updateLearn();
   },
@@ -1045,6 +1056,130 @@ async function compatReply(text) {
   }
 }
 
+/* ---------------- Plan protocol (iOS Shortcuts bridge) ---------------- */
+const PLAN_ACTIONS = {
+  setFocus: ['mode'], openApp: ['name'], openURL: ['url'],
+  createReminder: ['title', 'due'], createNote: ['title', 'body'],
+  logExpense: ['amount', 'category', 'note'], speak: ['text'],
+  showAlert: ['title', 'message'], wait: ['seconds'],
+  sendMessage: ['to', 'body'], addCalendarEvent: ['title', 'start', 'end'],
+  runShortcut: ['name']
+};
+const PLAN_CONFIRM = new Set(['sendMessage', 'addCalendarEvent', 'runShortcut']);
+const PLAN_NUMERIC = new Set(['amount', 'seconds']);
+
+function syncBase() {
+  const v = (LS.get('syncurl', '') || '').trim().replace(/\/+$/, '');
+  return /^https?:\/\//.test(v) ? v : '';
+}
+function planId() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  const rand = Math.random().toString(36).slice(2, 6);
+  return 'pln_' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes()) + '_' + rand;
+}
+function splitSpec(spec) {
+  const out = []; let cur = ''; let q = null;
+  for (const ch of String(spec)) {
+    if (q) { cur += ch; if (ch === q) q = null; continue; }
+    if (ch === '"' || ch === "'") { q = ch; cur += ch; continue; }
+    if (ch === '|') { if (cur.trim()) out.push(cur.trim()); cur = ''; continue; }
+    cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+function makePlan(intent, spec) {
+  const segments = splitSpec(spec).slice(0, 10);
+  const actions = [];
+  const skipped = [];
+  segments.forEach((seg, i) => {
+    const parts = seg.match(/"[^"]*"|'[^']*'|\S+/g) || [];
+    if (!parts.length) return;
+    const name = parts[0].replace(/["']/g, '');
+    if (!PLAN_ACTIONS[name]) { skipped.push(name); return; }
+    const keys = PLAN_ACTIONS[name];
+    const args = {};
+    parts.slice(1).forEach((raw, j) => {
+      const key = keys[j];
+      if (!key) return;
+      let val = raw.replace(/^["']|["']$/g, '');
+      if (PLAN_NUMERIC.has(key)) { const n = Number(val); val = isNaN(n) ? 0 : n; }
+      args[key] = val;
+    });
+    actions.push({ id: 'a' + (i + 1), name: name, args: args, confirm: PLAN_CONFIRM.has(name) });
+  });
+  const now = new Date();
+  return {
+    plan: {
+      v: 1, id: planId(), created: now.toISOString(),
+      expires: new Date(now.getTime() + 3600000).toISOString(),
+      intent: String(intent || 'planned by JARVIS').slice(0, 200),
+      actions: actions
+    },
+    skipped: skipped
+  };
+}
+
+async function postPlan(plan) {
+  const base = syncBase();
+  if (!base) return 'nosync';
+  try {
+    const res = await fetch(base + '/plan', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(plan)
+    });
+    return res.ok ? 'ok' : 'err';
+  } catch (e) { return 'offline'; }
+}
+
+function planButtons(msg, plan) {
+  const bar = msg.metaEl || msg.el.appendChild(Object.assign(document.createElement('div'), { className: 'meta' }));
+  const send = document.createElement('button');
+  send.className = 'fb'; send.textContent = 'Send to Shortcuts';
+  send.onclick = async () => {
+    const state2 = await postPlan(plan);
+    const url = 'shortcuts://run-shortcut?name=' + encodeURIComponent('JARVIS Run') +
+                '&input=text&text=' + encodeURIComponent(JSON.stringify(plan));
+    window.open(url, '_blank', 'noopener');
+    if (state2 === 'ok') toast('Plan posted to the mailbox and opened in Shortcuts.', 5000);
+    else if (state2 === 'nosync') toast('Opened in Shortcuts. Set a sync endpoint in Settings to use the mailbox.', 7000);
+    else toast('Opened in Shortcuts, but the mailbox is unreachable (' + state2 + ').', 7000);
+  };
+  const copy = document.createElement('button');
+  copy.className = 'fb'; copy.textContent = 'Copy plan';
+  copy.onclick = () => {
+    const txt = JSON.stringify(plan, null, 2);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(() => toast('Plan copied.', 2000)).catch(() => toast('Copy blocked.', 3000));
+    } else toast('Copy unavailable here.', 3000);
+  };
+  bar.appendChild(send); bar.appendChild(copy);
+}
+
+async function syncResults(quiet) {
+  const base = syncBase();
+  if (!base) return 0;
+  try {
+    const r = await fetch(base + '/results', { cache: 'no-store' });
+    if (!r.ok) return 0;
+    const j = await r.json();
+    const list = Array.isArray(j) ? j : (j.results || []);
+    const seen = new Set(Brain.items().map(i => i.q + '|' + i.a.slice(0, 60)));
+    let n = 0;
+    list.slice(-40).forEach(x => {
+      if (!x || !x.action) return;
+      const at = x.at ? String(x.at).slice(0, 16).replace('T', ' ') : 'an unknown time';
+      const a = 'Automation log: ' + x.action + ' ' + (x.ok === false ? 'failed' : 'succeeded') +
+                ' at ' + at + (x.detail ? ' — ' + String(x.detail).slice(0, 80) : '') + '.';
+      const q = 'automation ' + x.action;
+      if (seen.has(q.toLowerCase() + '|' + a.slice(0, 60))) return;
+      Brain.fact(q, a); n++;
+    });
+    if (n && !quiet) addSys('Synced ' + n + ' automation result' + (n === 1 ? '' : 's') + ' into memory.');
+    return n;
+  } catch (e) { return 0; }
+}
+
 /* ---------------- Router ---------------- */
 function route(text) {
   const t = String(text).trim();
@@ -1086,6 +1221,15 @@ function route(text) {
   if (low === 'prune learning') { const n = Brain.prune(); return { kind: 'reply', text: 'Pruned ' + n + ' weak or disliked items.' }; }
 
   // fleet
+  if (/^plan[:\s]/i.test(t)) {
+    const spec = t.replace(/^plan[:\s]+/i, '').trim();
+    if (!spec) {
+      return { kind: 'reply', text: 'Give me actions to plan, separated by |\n\nExample:\nplan: setFocus Work | openApp Calendar | createReminder "Chase the insurance quote" | logExpense 200 insurance "monthly accrual"\n\nKnown actions: ' + Object.keys(PLAN_ACTIONS).join(', ') };
+    }
+    const built = makePlan(spec, spec);
+    return { kind: 'plan', plan: built.plan, skipped: built.skipped, spec: spec };
+  }
+
   if (/^(fleet|rental|car rental|car)$/.test(low)) return { kind: 'reply', text: fleetMath('') };
   if ((m = t.match(/^(?:fleet|rental)\s+(.+)$/i))) return { kind: 'reply', text: fleetMath(m[1]) };
 
@@ -1332,6 +1476,20 @@ async function handle(raw) {
     return;
   }
 
+  if (r.kind === 'plan') {
+    const n = r.plan.actions.length;
+    const lines = r.plan.actions.map(a => '  ' + a.id + '  ' + a.name + '  ' + JSON.stringify(a.args) + (a.confirm ? '  [confirm required]' : ''));
+    const body = 'Plan ' + r.plan.id + ' — ' + n + ' action' + (n === 1 ? '' : 's') + (r.plan.intent ? '\n' + r.plan.intent : '') +
+      '\n\n' + (lines.join('\n') || '  (no valid actions)') +
+      (r.skipped.length ? '\n\nSkipped (not in the registry): ' + r.skipped.join(', ') : '') +
+      '\n\nexpires ' + r.plan.expires.slice(0, 16).replace('T', ' ');
+    const msg = addMsg(body, 'bot', 'plan · ' + n + ' actions');
+    planButtons(msg, r.plan);
+    saveChat('bot', body, 'plan');
+    speak('Plan ready with ' + n + ' action' + (n === 1 ? '' : 's') + '. ' + (syncBase() ? 'Send it to Shortcuts when you are ready.' : 'Set a sync endpoint in settings to use the mailbox.'));
+    return;
+  }
+
   if (r.kind === 'fact') {
     setMode('thinking');
     const t = addMsg('…', 'bot');
@@ -1562,6 +1720,15 @@ $('selStyle').value = LS.get('style', 'normal');
 $('selStyle').addEventListener('change', (e) => { LS.set('style', e.target.value); toast('Answer style: ' + e.target.value + '.', 2500); });
 $('selLang').value = LS.get('lang', 'en-US');
 $('selLang').addEventListener('change', (e) => { state.lang = e.target.value; LS.set('lang', state.lang); if (state.recPtt) state.recPtt.lang = state.lang; if (state.recWake) state.recWake.lang = state.lang; toast('Voice language: ' + e.target.value, 2500); });
+$('inpSync').value = LS.get('syncurl', '');
+$('inpSync').addEventListener('change', async (e) => {
+  const v = e.target.value.trim();
+  if (v && !/^https?:\/\//.test(v)) { toast('Enter a full https:// URL.', 5000); return; }
+  LS.set('syncurl', v.replace(/\/+$/, ''));
+  addSys(v ? 'Sync endpoint saved. Plans can now be posted and results pulled.' : 'Sync endpoint cleared.');
+  const n = await syncResults(true);
+  if (n) addSys('Pulled ' + n + ' existing automation result' + (n === 1 ? '' : 's') + '.');
+});
 $('inpModel').value = LS.get('customModel', '');
 $('inpModel').addEventListener('change', async (e) => {
   const v = e.target.value.trim();
@@ -1589,7 +1756,7 @@ document.addEventListener('keydown', (e) => {
   if (e.code === 'Escape') { stopSpeech(); document.querySelectorAll('.sheet').forEach(s => s.classList.remove('open')); }
 });
 
-[['help', 'help'], ['what have you learned', 'learned'], ['notes', 'notes'], ['fleet 65 15 4200 22000', 'fleet check']].forEach(([cmd, label]) => {
+[['help', 'help'], ['what have you learned', 'learned'], ['plan: setFocus Work | createReminder "Check vehicle 2 insurance"', 'plan demo'], ['fleet 65 15 4200 22000', 'fleet check']].forEach(([cmd, label]) => {
   const b = document.createElement('button');
   b.className = 'chip'; b.textContent = label;
   b.addEventListener('click', () => handle(cmd));
@@ -1603,6 +1770,7 @@ setSendMode('send');
 setStatus(state.compat ? 'text mode' : 'commands ready', state.compat ? 'busy' : '');
 setupInstall();
 setupOffline();
+syncResults(true).then(n => { if (n) addSys('Synced ' + n + ' automation result' + (n === 1 ? '' : 's') + ' from the mailbox.'); });
 if (!renderSavedChat()) {
   addMsg(state.compat
     ? 'JARVIS online in text mode.\n\nThis device has no WebGPU, so no model is loaded — instead I answer from what you teach me, built-in business notes, and live instant facts. Voice in and out works normally.\n\nTry: "fleet 65 15 4200 22000", "what insurance do i need", or teach me with "learn: my target market is Phoenix".'
