@@ -1156,6 +1156,24 @@ function planButtons(msg, plan) {
   bar.appendChild(send); bar.appendChild(copy);
 }
 
+function mergeResults(list) {
+  const seen = new Set(Brain.items().map(i => i.q + '|' + i.a.slice(0, 60)));
+  let n = 0;
+  (list || []).slice(-60).forEach(x => {
+    if (!x || !x.action) return;
+    const at = x.at ? String(x.at).slice(0, 16).replace('T', ' ') : 'an unknown time';
+    const a = 'Automation log: ' + x.action + ' ' + (x.ok === false ? 'failed' : 'succeeded') +
+              ' at ' + at + (x.detail ? ' — ' + String(x.detail).slice(0, 80) : '') + '.';
+    const q = ('automation ' + x.action).toLowerCase().trim();
+    const key = q + '|' + a.slice(0, 60);
+    if (seen.has(key)) return;
+    seen.add(key);
+    Brain.fact(q, a);
+    n++;
+  });
+  return n;
+}
+
 async function syncResults(quiet) {
   const base = syncBase();
   if (!base) return 0;
@@ -1164,20 +1182,36 @@ async function syncResults(quiet) {
     if (!r.ok) return 0;
     const j = await r.json();
     const list = Array.isArray(j) ? j : (j.results || []);
-    const seen = new Set(Brain.items().map(i => i.q + '|' + i.a.slice(0, 60)));
-    let n = 0;
-    list.slice(-40).forEach(x => {
-      if (!x || !x.action) return;
-      const at = x.at ? String(x.at).slice(0, 16).replace('T', ' ') : 'an unknown time';
-      const a = 'Automation log: ' + x.action + ' ' + (x.ok === false ? 'failed' : 'succeeded') +
-                ' at ' + at + (x.detail ? ' — ' + String(x.detail).slice(0, 80) : '') + '.';
-      const q = 'automation ' + x.action;
-      if (seen.has(q.toLowerCase() + '|' + a.slice(0, 60))) return;
-      Brain.fact(q, a); n++;
-    });
+    const n = mergeResults(list);
     if (n && !quiet) addSys('Synced ' + n + ' automation result' + (n === 1 ? '' : 's') + ' into memory.');
     return n;
   } catch (e) { return 0; }
+}
+
+/* paste results back with no server at all */
+function importResults(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return { n: 0, msg: 'Nothing to import. Paste the results JSON or lines like: setFocus ok 2026-10-30 08:00' };
+  let list = null;
+  try {
+    const j = JSON.parse(raw);
+    list = Array.isArray(j) ? j : (j.results || null);
+  } catch (e) { list = null; }
+  if (!list) {
+    list = raw.split(/\n+/).map(line => {
+      const m = line.trim().match(/^([A-Za-z]+)\s+(ok|fail(?:ed)?|true|false)?\s*(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?)?\s*(.*)$/);
+      if (!m) return null;
+      const stamp = m[3] ? new Date(m[3].replace(' ', 'T')) : new Date();
+      return {
+        action: m[1],
+        ok: !/^(fail|false)/i.test(m[2] || 'ok'),
+        detail: (m[4] || '').slice(0, 120),
+        at: isNaN(stamp.getTime()) ? new Date().toISOString() : stamp.toISOString()
+      };
+    }).filter(Boolean);
+  }
+  const n = mergeResults(list);
+  return { n: n, msg: n ? 'Imported ' + n + ' automation result' + (n === 1 ? '' : 's') + ' into memory.' : 'Those results were already in memory (deduped).' };
 }
 
 /* ---------------- Router ---------------- */
@@ -1221,6 +1255,11 @@ function route(text) {
   if (low === 'prune learning') { const n = Brain.prune(); return { kind: 'reply', text: 'Pruned ' + n + ' weak or disliked items.' }; }
 
   // fleet
+  if ((m = t.match(/^import[:\s]+([\s\S]+)$/i))) {
+    const res = importResults(m[1]);
+    return { kind: 'reply', text: res.msg };
+  }
+
   if (/^plan[:\s]/i.test(t)) {
     const spec = t.replace(/^plan[:\s]+/i, '').trim();
     if (!spec) {
@@ -1762,6 +1801,15 @@ document.addEventListener('keydown', (e) => {
   b.addEventListener('click', () => handle(cmd));
   $('chips').appendChild(b);
 });
+
+// one-link configuration: ?sync=https://your-mailbox/SECRET
+(function bootstrapSync() {
+  try {
+    const p = new URLSearchParams(location.search || '');
+    const s = (p.get('sync') || '').trim();
+    if (/^https?:\/\//.test(s)) LS.set('syncurl', s.replace(/\/+$/, ''));
+  } catch (e) {}
+})();
 
 fillModelSelect();
 updateMem(); updateLearn(); updateWakeBtn();
